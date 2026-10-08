@@ -50,7 +50,6 @@ function PlaceSearch({ label, place, onSelect }) {
         <input
           type="search"
           value={text}
-          placeholder="Search a place, or tap the map"
           onChange={(e) => setText(e.target.value)}
           onFocus={(e) => text === MAP_POINT && e.target.select()}
         />
