@@ -19,13 +19,12 @@ function Toggle({ label, value, options, onChange }) {
   );
 }
 
-const MAP_POINT = "Point on map";
 const slug = (name) => name.toLowerCase().split(",")[0].trim().replace(/\s+/g, "-");
 
 function PlaceSearch({ label, place, onSelect }) {
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
-  const shown = place ? (place.name ?? MAP_POINT) : "";
+  const shown = place?.name ?? "";
 
   useEffect(() => setText(shown), [shown]);
 
@@ -51,7 +50,6 @@ function PlaceSearch({ label, place, onSelect }) {
           type="search"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onFocus={(e) => text === MAP_POINT && e.target.select()}
         />
       </label>
       {results.length > 0 && (
