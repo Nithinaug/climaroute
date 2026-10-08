@@ -71,7 +71,7 @@ resource "aws_ecs_task_definition" "prepare" {
 
   container_definitions = jsonencode([{
     name      = "prepare"
-    image     = "${aws_ecr_repository.app.repository_url}:${var.prepare_image_tag}"
+    image     = "${local.repo_url}:${var.prepare_image_tag}"
     essential = true
     environment = [for k, v in merge(local.area_env, {
       DATA_BUCKET     = aws_s3_bucket.data.bucket

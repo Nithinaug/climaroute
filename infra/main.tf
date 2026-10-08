@@ -1,18 +1,25 @@
 data "aws_caller_identity" "current" {}
 
+# One stack per city: the default workspace is Bengaluru, others are named after the city
+# (terraform workspace new delhi). All cities share one image repository.
 locals {
-  name      = "climaroute"
+  primary   = terraform.workspace == "default"
+  name      = local.primary ? "climaroute" : "climaroute-${terraform.workspace}"
   account   = data.aws_caller_identity.current.account_id
-  image_uri = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
+  repo_url  = "${local.account}.dkr.ecr.${var.region}.amazonaws.com/climaroute"
+  image_uri = "${local.repo_url}:${var.image_tag}"
   sfn_name  = "${local.name}-shade-pipeline"
   sfn_arn   = "arn:aws:states:${var.region}:${local.account}:stateMachine:${local.sfn_name}"
   area_env  = { AREA_NAME = var.area_name, AREA_BBOX = var.area_bbox }
+  # Weekly shade runs, staggered so two cities never share the Lambda concurrency limit
+  # (UTC; Monday 05:00 / 05:30 / 06:00 IST).
+  shade_utc = { default = "30 23 ? * SUN", delhi = "0 0 ? * MON", mumbai = "30 0 ? * MON" }
 
   # name => handler, memory MB, timeout s
   functions = {
     api        = { handler = "api.main.handler", memory = 3008, timeout = 29 }
     set-sun    = { handler = "pipeline.handlers.set_sun", memory = 512, timeout = 60 }
-    shade-tile = { handler = "pipeline.handlers.shade_tile", memory = 1024, timeout = 240 }
+    shade-tile = { handler = "pipeline.handlers.shade_tile", memory = 2048, timeout = 240 }
     merge      = { handler = "pipeline.handlers.merge", memory = 3008, timeout = 600 }
   }
 }
@@ -35,12 +42,19 @@ resource "aws_s3_bucket_public_access_block" "data" {
 }
 
 resource "aws_ecr_repository" "app" {
-  name         = local.name
+  count        = local.primary ? 1 : 0
+  name         = "climaroute"
   force_delete = true
 }
 
+moved {
+  from = aws_ecr_repository.app
+  to   = aws_ecr_repository.app[0]
+}
+
 resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
+  count      = local.primary ? 1 : 0
+  repository = aws_ecr_repository.app[0].name
   policy = jsonencode({
     rules = [{
       rulePriority = 1
@@ -49,6 +63,11 @@ resource "aws_ecr_lifecycle_policy" "app" {
       action       = { type = "expire" }
     }]
   })
+}
+
+moved {
+  from = aws_ecr_lifecycle_policy.app
+  to   = aws_ecr_lifecycle_policy.app[0]
 }
 
 resource "aws_dynamodb_table" "reports" {
@@ -259,7 +278,7 @@ resource "aws_iam_role_policy" "scheduler" {
 
 resource "aws_cloudwatch_event_rule" "daily_shade" {
   name                = "${local.name}-daily-shade"
-  schedule_expression = "cron(30 23 ? * SUN *)" # Sunday 23:30 UTC = Monday 05:00 IST
+  schedule_expression = "cron(${lookup(local.shade_utc, terraform.workspace, "0 1 ? * MON")} *)"
 }
 
 resource "aws_cloudwatch_event_target" "daily_shade" {

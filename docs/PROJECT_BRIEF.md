@@ -34,8 +34,11 @@ flood-risk streets"*.
   two-wheeler riders are the most exposed to heat and street flooding
   (a scooter stalls in ~30 cm of water). Cars and public transport are
   future scope.
-- **Deployed area: all of Bengaluru** (bbox 77.46,12.83,77.78,13.14). The area is
-  configuration (`AREA_NAME`, `AREA_BBOX`), so any city can be built the same way.
+- **Deployed cities: Bengaluru** (bbox 77.46,12.83,77.78,13.14) **and Delhi**
+  (77.0,28.45,77.35,28.8). Each city is its own copy of the backend (Terraform
+  workspace: `default` = Bengaluru, `delhi`), built from the same code and image with
+  `AREA_NAME` / `AREA_BBOX`. The frontend lists every city's API in `VITE_API_URLS`
+  and switches between them.
 - **First area (development): Koramangala, Bengaluru**, about 2 × 2 km around 4th to 6th Block,
   Sony World Signal and Ejipura. Chosen because:
   - it's a well-known waterlogging area, so our terrain model can be checked
@@ -789,6 +792,11 @@ terraform -chdir=infra apply -var image_tag=$TAG -var area_name=Bengaluru \
 infra/run_prepare.sh
 # 4. Shade + merge (also runs automatically on Mondays 05:00 IST)
 aws stepfunctions start-execution --state-machine-arn $(terraform -chdir=infra output -raw pipeline_arn)
+# Another city: same steps in its own workspace, e.g.
+#   terraform -chdir=infra workspace new delhi    (select back with: workspace select default)
+#   apply with -var area_name=Delhi -var area_bbox=77.0,28.45,77.35,28.8 \
+#     -var osm_extract_url=https://download.geofabrik.de/asia/india/northern-zone-latest.osm.pbf
+#   then add its api_url to VITE_API_URLS in frontend/.env.production
 # 5. Frontend
 cd frontend && npm install && npm run dev   # needs frontend/.env.local (see .env.example)
 ```

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getArea, getReports, getRoute, postReport, searchPlaces } from "./api.js";
+import { API_URLS, getArea, getReports, getRoute, postReport, searchPlaces, setCityApi } from "./api.js";
 import { comparison, conditionsText, duration, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
 
@@ -94,10 +94,29 @@ export default function App() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    getArea().then(setArea).catch((e) => setError(e.message));
+  const [cities, setCities] = useState([]);
+
+  const chooseCity = useCallback((city) => {
+    setCityApi(city.url);
+    setArea(city);
+    setOrigin(null);
+    setDestination(null);
+    setResult(null);
+    setReports(null);
+    setError(null);
     getReports().then(setReports).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    Promise.all(API_URLS.map((url) => getArea(url).then((a) => ({ ...a, url })).catch(() => null)))
+      .then((found) => {
+        const ok = found.filter(Boolean);
+        if (!ok.length) throw new Error("Can't reach the server. Check your connection and try again.");
+        setCities(ok);
+        chooseCity(ok[0]);
+      })
+      .catch((e) => setError(e.message));
+  }, [chooseCity]);
 
   const report = useCallback(async (p) => {
     setReporting(false);
@@ -192,6 +211,12 @@ export default function App() {
           <p className="tagline">Shaded routes in the heat. Dry routes in the rain.</p>
         </header>
 
+        {cities.length > 1 && (
+          <Toggle label="City" value={area?.url}
+            onChange={(url) => chooseCity(cities.find((c) => c.url === url))}
+            options={cities.map((c) => [c.url, c.name])} />
+        )}
+
         <PlaceSearch label="From" place={origin}
           onSelect={(p) => { setError(null); setResult(null); setOrigin(p); }} />
         <PlaceSearch label="To" place={destination}
@@ -245,7 +270,7 @@ export default function App() {
         </div>
 
         <footer className="fine">
-          Covers {area?.name ?? "Koramangala, Bengaluru"}. Map © OpenStreetMap contributors.
+          {area && `Covers ${area.name}.`} Map © OpenStreetMap contributors.
           Heights: Google Open Buildings. Elevation: Copernicus DEM. Weather: Open-Meteo (live).
         </footer>
       </aside>

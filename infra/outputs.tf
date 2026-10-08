@@ -7,7 +7,7 @@ output "data_bucket" {
 }
 
 output "ecr_repository_url" {
-  value = aws_ecr_repository.app.repository_url
+  value = local.repo_url
 }
 
 output "reports_table" {
@@ -21,4 +21,12 @@ output "pipeline_arn" {
 output "prepare_network" {
   description = "awsvpcConfiguration for aws ecs run-task (used by run_prepare.sh)"
   value       = "subnets=[${join(",", data.aws_subnets.default.ids)}],securityGroups=[${data.aws_security_group.default.id}],assignPublicIp=ENABLED"
+}
+
+output "prepare_cluster" {
+  value = aws_ecs_cluster.main.name
+}
+
+output "prepare_task_definition" {
+  value = aws_ecs_task_definition.prepare.family
 }

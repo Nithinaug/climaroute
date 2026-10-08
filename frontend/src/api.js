@@ -1,9 +1,14 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+// One backend per city: VITE_API_URLS="https://bengaluru-api,https://delhi-api"
+export const API_URLS = (import.meta.env.VITE_API_URLS ?? import.meta.env.VITE_API_URL ?? "").split(",");
+let apiUrl = API_URLS[0];
+export const setCityApi = (url) => {
+  apiUrl = url;
+};
 
 async function request(path, options) {
   let res;
   try {
-    res = await fetch(`${API_URL}${path}`, options);
+    res = await fetch(`${apiUrl}${path}`, options);
   } catch {
     throw new Error("Can't reach the server. Check your connection and try again.");
   }
@@ -16,7 +21,8 @@ async function request(path, options) {
   return body;
 }
 
-export const getArea = () => request("/area");
+export const getArea = (url) =>
+  fetch(`${url}/area`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))));
 
 export const getReports = () => request("/reports");
 

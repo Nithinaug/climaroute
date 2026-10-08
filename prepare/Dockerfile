@@ -5,7 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends osmium-tool cur
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt requirements-dev.txt requirements-prepare.txt ./
-RUN pip install --no-cache-dir -r requirements-prepare.txt boto3
+RUN pip install --no-cache-dir -r requirements-prepare.txt boto3 \
+    && python -c "import duckdb; duckdb.sql('INSTALL httpfs')"
 
 COPY shared/ shared/
 COPY routing/ routing/

@@ -10,7 +10,14 @@ NAME = os.environ.get("AREA_NAME", "Koramangala, Bengaluru")
 _BBOX = os.environ.get("AREA_BBOX", "77.612,12.925,77.636,12.945")
 BBOX = tuple(float(v) for v in _BBOX.split(","))  # min_lon, min_lat, max_lon, max_lat
 CENTER = {"lat": (BBOX[1] + BBOX[3]) / 2, "lon": (BBOX[0] + BBOX[2]) / 2}
-UTM_CRS = "EPSG:32643"
+
+
+def utm_crs(lon: float) -> str:
+    """WGS84 UTM zone (northern hemisphere) for a longitude: metres for shadows and lengths."""
+    return f"EPSG:326{int((lon + 180) // 6) + 1:02d}"
+
+
+UTM_CRS = utm_crs(CENTER["lon"])
 TIMEZONE = "Asia/Kolkata"
 SLOT_START, SLOT_MINUTES, SLOT_COUNT = "06:00", 15, 52  # 06:00 .. 18:45
 

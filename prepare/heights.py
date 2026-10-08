@@ -3,6 +3,7 @@
 import io
 import json
 import logging
+import urllib.parse
 import urllib.request
 
 import geopandas as gpd
@@ -17,12 +18,8 @@ from shared.storage import read_bytes, write_bytes
 
 log = logging.getLogger(__name__)
 
-# 2023 manifests for UTM 43N (Bengaluru); each lists every tile and its extent.
-MANIFESTS = [
-    "https://storage.googleapis.com/open-buildings-temporal-data/v1/manifests/"
-    f"{cell}_EPSG_32643_2023_06_30.json"
-    for cell in ("39", "3b")
-]
+BUCKET_API = "https://storage.googleapis.com/storage/v1/b/open-buildings-temporal-data/o"
+HEIGHT_YEAR = "2023_06_30"
 HEIGHT_BAND = 2  # bands: fractional_count, height, presence
 RESOLUTION_M = 2.0  # source is 0.5 m pixels with ~4 m effective resolution
 LEVEL_HEIGHT_M = 3.0
@@ -67,6 +64,17 @@ def _osm_height(row) -> float | None:
     return levels * LEVEL_HEIGHT_M if levels else None
 
 
+def manifest_urls() -> list[str]:
+    """The dataset's manifests for the area's UTM zone; each lists every tile and its extent."""
+    epsg = area.UTM_CRS.split(":")[1]
+    query = urllib.parse.urlencode(
+        {"prefix": "v1/manifests/", "matchGlob": f"**_EPSG_{epsg}_{HEIGHT_YEAR}.json"}
+    )
+    with urllib.request.urlopen(f"{BUCKET_API}?{query}") as resp:
+        names = [item["name"] for item in json.load(resp).get("items", [])]
+    return [f"https://storage.googleapis.com/open-buildings-temporal-data/{n}" for n in names]
+
+
 def tile_urls(bounds: tuple[float, float, float, float], manifests: list[dict]) -> list[str]:
     """Open Buildings tiles overlapping UTM bounds (min_x, min_y, max_x, max_y)."""
     urls = []
@@ -87,7 +95,7 @@ def _height_raster(bounds: tuple[float, float, float, float]) -> tuple[np.ndarra
     try:
         data = read_bytes(key)
     except FileNotFoundError:
-        manifests = [json.load(urllib.request.urlopen(url)) for url in MANIFESTS]
+        manifests = [json.load(urllib.request.urlopen(url)) for url in manifest_urls()]
         sources = [rasterio.open(f"/vsicurl/{url}") for url in tile_urls(bounds, manifests)]
         array, transform = merge(sources, bounds=bounds, res=RESOLUTION_M, indexes=[HEIGHT_BAND])
         base = {

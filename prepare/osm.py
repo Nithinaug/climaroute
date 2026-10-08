@@ -12,7 +12,7 @@ from pathlib import Path
 import geopandas as gpd
 import osmnx as ox
 
-from prepare import pbf
+from prepare import overture, pbf
 from shared import area
 from shared.storage import read_bytes, write_bytes
 
@@ -45,7 +45,7 @@ def _cached(key: str, fetch, dump, load):
     try:
         return load(read_bytes(key))
     except FileNotFoundError:
-        value = _with_mirrors(fetch)
+        value = fetch()
         write_bytes(key, dump(value))
         return value
 
@@ -56,7 +56,9 @@ def street_graph(network_type: str):
         return pbf.street_graph(_area_pbf(), network_type)
     return _cached(
         area.raw_key(f"osm_{network_type}.pkl"),
-        lambda: ox.graph_from_bbox(area.BBOX, network_type=network_type, simplify=True),
+        lambda: _with_mirrors(
+            lambda: ox.graph_from_bbox(area.BBOX, network_type=network_type, simplify=True)
+        ),
         pickle.dumps,
         pickle.loads,
     )
@@ -84,14 +86,23 @@ def features(name: str, tags: dict, buffer_deg: float = 0.0) -> gpd.GeoDataFrame
 
     return _cached(
         area.raw_key(f"{name}.geojson"),
-        fetch,
+        lambda: _with_mirrors(fetch),
         lambda gdf: gdf.to_json(drop_id=True).encode(),
         lambda b: gpd.read_file(io.BytesIO(b)),
     )
 
 
 def buildings() -> gpd.GeoDataFrame:
-    gdf = features("buildings", {"building": True}, BUILDING_BUFFER_DEG)
+    """Overture footprints (includes OSM's), with a buffer: outside buildings cast shadows in.
+    Cached in our bucket: Overture lives in us-west-2 and a city query takes minutes."""
+    min_lon, min_lat, max_lon, max_lat = area.BBOX
+    b = BUILDING_BUFFER_DEG
+    gdf = _cached(
+        area.raw_key("buildings_overture.pkl"),
+        lambda: overture.buildings((min_lon - b, min_lat - b, max_lon + b, max_lat + b)),
+        pickle.dumps,
+        pickle.loads,
+    )
     return gdf[gdf.geometry.geom_type.isin(["Polygon", "MultiPolygon"])].reset_index(drop=True)
 
 
