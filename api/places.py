@@ -32,3 +32,19 @@ def search(text: str, limit: int = 5) -> list[dict]:
         for i in items
         if "Position" in i
     ]
+
+
+@lru_cache(maxsize=2048)
+def name_at(lat: float, lon: float) -> str | None:
+    """Short name for a point, e.g. "100 Feet Ring Road, Indira Nagar"."""
+    try:
+        items = _client().reverse_geocode(QueryPosition=[lon, lat], MaxResults=1, Language="en")[
+            "ResultItems"
+        ]
+    except Exception as e:  # noqa: BLE001 - same as search
+        raise SearchUnavailableError(str(e)) from e
+    if not items:
+        return None
+    address = items[0].get("Address", {})
+    parts = [address.get("Street"), address.get("District") or address.get("Locality")]
+    return ", ".join(p for p in parts if p) or items[0].get("Title")

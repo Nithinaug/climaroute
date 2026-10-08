@@ -123,6 +123,16 @@ def search(q: str = Query(min_length=2, max_length=100)):
         ) from None
 
 
+@app.get("/place")
+def place(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180)):
+    try:
+        return {"name": places.name_at(round(lat, 4), round(lon, 4))}
+    except places.SearchUnavailableError:
+        raise ApiError(
+            503, "SEARCH_UNAVAILABLE", "Place names aren't available right now."
+        ) from None
+
+
 @app.post("/route")
 def route(req: RouteRequest):
     started = time.perf_counter()

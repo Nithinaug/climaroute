@@ -43,3 +43,4 @@ credentials*
 # Large downloads
 *.osm.pbf
 *.tif
+!infra/cities/*.tfvars

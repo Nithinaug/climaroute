@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { API_URLS, getArea, getReports, getRoute, postReport, searchPlaces, setCityApi } from "./api.js";
+import { API_URLS, getArea, getPlaceName, getReports, getRoute, postReport, searchPlaces, setCityApi } from "./api.js";
 import { comparison, conditionsText, duration, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
 
@@ -19,6 +19,11 @@ function Toggle({ label, value, options, onChange }) {
   );
 }
 
+// Fill in a tapped point's street name once it arrives (if the point hasn't changed since).
+const nameIt = (p, set) =>
+  getPlaceName(p)
+    .then(({ name }) => name && set((cur) => (cur?.lat === p.lat && cur?.lon === p.lon ? { ...cur, name } : cur)))
+    .catch(() => {});
 const slug = (name) => name.toLowerCase().split(",")[0].trim().replace(/\s+/g, "-");
 
 function PlaceSearch({ label, place, onSelect }) {
@@ -136,10 +141,12 @@ export default function App() {
       setError(null);
       if (!origin || destination) {
         setOrigin(p);
+        nameIt(p, setOrigin);
         setDestination(null);
         setResult(null);
       } else {
         setDestination(p);
+        nameIt(p, setDestination);
       }
     },
     [area, origin, destination, reporting, report],
@@ -167,7 +174,8 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [origin, destination, mode, transport, time, reports]);
+  // Coordinates, not objects: adding a place name to a point must not re-route.
+  }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, reports]);
 
   const useMyLocation = () => {
     if (!navigator.geolocation) return setError("Location isn't available in this browser.");

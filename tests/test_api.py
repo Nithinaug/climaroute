@@ -150,3 +150,19 @@ def test_search_unavailable(monkeypatch):
     r = client.get("/search", params={"q": "koramangala"})
     assert r.status_code == 503 and r.json()["error"]["code"] == "SEARCH_UNAVAILABLE"
     assert client.get("/search", params={"q": "k"}).status_code == 422
+
+
+def test_place_name(monkeypatch):
+    class Fake:
+        def reverse_geocode(self, **kw):
+            assert kw["QueryPosition"] == [77.6408, 12.9784]
+            item = {
+                "Title": "long",
+                "Address": {"Street": "100 Feet Rd", "District": "Indiranagar"},
+            }
+            return {"ResultItems": [item]}
+
+    main.places.name_at.cache_clear()
+    monkeypatch.setattr(main.places, "_client", lambda: Fake())
+    r = client.get("/place", params={"lat": 12.97841, "lon": 77.64079})
+    assert r.json() == {"name": "100 Feet Rd, Indiranagar"}

@@ -41,3 +41,5 @@ export const getRoute = (params) =>
   });
 
 export const searchPlaces = (text) => request(`/search?q=${encodeURIComponent(text)}`);
+
+export const getPlaceName = ({ lat, lon }) => request(`/place?lat=${lat}&lon=${lon}`);
