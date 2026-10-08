@@ -39,8 +39,6 @@ button:focus-visible, input:focus-visible { outline: 3px solid #f59e0b; outline-
 button.link { border: 0; background: none; color: var(--teal); text-decoration: underline; padding: 4px; }
 
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.time { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; color: var(--muted); }
-.time input { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
 
 .hint { margin: 0; color: var(--muted); }
 .notice { margin: 0; color: #065f46; background: #ecfdf5; padding: 8px 10px; border-radius: 8px; }
@@ -73,3 +71,15 @@ button.link { border: 0; background: none; color: var(--teal); text-decoration: 
   border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 
 .simulate { display: flex; gap: 8px; align-items: center; font-size: 0.95rem; }
+
+/* Time input that looks like the City dropdown: "Now" when empty, arrow instead of clock
+   (the native clock icon is pushed outside the box and clipped). */
+.picker { position: relative; display: block; overflow: hidden; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; }
+.picker::after { content: ""; position: absolute; right: 12px; top: 50%; width: 8px; height: 8px;
+  border: solid currentColor; border-width: 0 2px 2px 0; transform: translateY(-70%) rotate(45deg);
+  pointer-events: none; color: var(--muted); }
+.picker input { font: inherit; font-size: 1rem; color: inherit; border: 0; background: none;
+  padding: 8px 10px; width: calc(100% + 40px); cursor: pointer; }
+.picker input.empty { color: transparent; }
+.picker .now { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; }

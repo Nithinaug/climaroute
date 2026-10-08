@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URLS, getArea, getBestTime, getPlaceName, getReports, getRoute, postReport, searchPlaces, setCityApi } from "./api.js";
 import { comparison, conditionsText, duration, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
@@ -92,6 +92,7 @@ export default function App() {
   const [transport, setTransport] = useState("walk");
   const [time, setTime] = useState(""); // "" = leave now
   const [simulateRain, setSimulateRain] = useState(false);
+  const timeRef = useRef(null);
   const [best, setBest] = useState(null);
   const [reports, setReports] = useState(null);
   const [reporting, setReporting] = useState(false);
@@ -261,15 +262,15 @@ export default function App() {
         )}
 
         {mode === "summer" && (
-          <div className="row">
-            <label className="time">
-              Leaving at
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-              {time && (
-                <button type="button" className="link" onClick={() => setTime("")}>now</button>
-              )}
-            </label>
-          </div>
+          <label className="city">
+            Leaving at
+            <span className="picker">
+              <input ref={timeRef} type="time" value={time} className={time ? "" : "empty"}
+                onChange={(e) => setTime(e.target.value)} onClick={() => timeRef.current?.showPicker?.()} />
+              {!time && <span className="now" aria-hidden="true">Now</span>}
+            </span>
+            {time && <button type="button" className="link" onClick={() => setTime("")}>Leave now instead</button>}
+          </label>
         )}
 
         <div className="row actions">
