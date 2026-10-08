@@ -101,8 +101,9 @@ aws stepfunctions start-execution --state-machine-arn $(terraform -chdir=infra o
 
 Each city is its own copy of the backend in a Terraform workspace (`default` is Bengaluru):
 `terraform -chdir=infra workspace new delhi`, then the same apply with that city's `area_name`,
-`area_bbox` and `osm_extract_url` (Geofabrik zone). Add its `api_url` to `VITE_API_URLS` in
-`frontend/.env.production`.
+`area_bbox` and `osm_extract_url` (Geofabrik zone). Add its `api_url` to the
+`VITE_API_URLS` environment variable in the Amplify console (and in `frontend/.env.local`
+for local builds).
 
 ## Limitations
 

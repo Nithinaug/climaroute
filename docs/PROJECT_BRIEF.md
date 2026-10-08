@@ -252,7 +252,7 @@ Key decisions:
 | `OSM_EXTRACT_URL` | prepare task | Geofabrik regional extract to clip the city from |
 | `ALLOWED_ORIGINS` | api | CORS: Amplify URL + `http://localhost:5173` |
 | `LOG_LEVEL` | api, pipeline | default `INFO` |
-| `VITE_API_URLS` | frontend | comma-separated API URL of every city (`frontend/.env.production`) |
+| `VITE_API_URLS` | frontend | comma-separated API URL of every city (Amplify console environment variable; `frontend/.env.local` locally) |
 
 No secrets in the repo. Amazon Location is called from the API Lambda with its
 IAM role, so no map key reaches the browser.
@@ -778,7 +778,7 @@ aws stepfunctions start-execution --state-machine-arn $(terraform -chdir=infra o
 #   terraform -chdir=infra workspace new delhi    (select back with: workspace select default)
 #   apply with -var area_name=Delhi -var area_bbox=77.0,28.45,77.35,28.8 \
 #     -var osm_extract_url=https://download.geofabrik.de/asia/india/northern-zone-latest.osm.pbf
-#   then add its api_url to VITE_API_URLS in frontend/.env.production
+#   then add its api_url to VITE_API_URLS in the Amplify console (and frontend/.env.local)
 # 5. Frontend
 cd frontend && npm install && npm run dev   # needs frontend/.env.local (see .env.example)
 ```
