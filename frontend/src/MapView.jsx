@@ -8,7 +8,7 @@ setWorkerUrl(workerUrl);
 const STYLE_URL =
   import.meta.env.VITE_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/liberty";
 const EMPTY = { type: "FeatureCollection", features: [] };
-const COLORS = { safe: "#0f766e", direct: "#64748b", origin: "#2563eb", destination: "#dc2626" };
+const COLORS = { safe: "#0f766e", direct: "#64748b", origin: "#2563eb", destination: "#b91c1c" };
 
 const bboxPolygon = ([w, s, e, n]) => ({
   type: "Feature",
@@ -36,10 +36,11 @@ function addLayers(map) {
   map.addLayer({ id: "cr-water", type: "circle", source: "cr-water",
     paint: { "circle-radius": 5, "circle-color": "#0ea5e9", "circle-stroke-width": 1.5,
              "circle-stroke-color": "#fff" } });
+  // Flood reports: amber with a dark ring, fading as the report ages (never red: red = destination).
   map.addLayer({ id: "cr-reports", type: "circle", source: "cr-reports",
-    paint: { "circle-radius": 9, "circle-color": "#dc2626",
+    paint: { "circle-radius": 10, "circle-color": "#f59e0b",
              "circle-opacity": ["+", 0.35, ["*", 0.65, ["get", "strength"]]],
-             "circle-stroke-width": 2, "circle-stroke-color": "#fff" } });
+             "circle-stroke-width": 3, "circle-stroke-color": "#78350f" } });
   map.addLayer({ id: "cr-points", type: "circle", source: "cr-points",
     paint: { "circle-radius": 8, "circle-stroke-width": 2, "circle-stroke-color": "#fff",
              "circle-color": ["match", ["get", "role"], "origin", COLORS.origin, COLORS.destination] } });

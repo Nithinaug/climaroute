@@ -53,6 +53,6 @@ button.link { border: 0; background: none; color: var(--teal); text-decoration: 
 .swatch.safe { background: var(--teal); }
 .swatch.direct { background: repeating-linear-gradient(90deg, #64748b 0 5px, transparent 5px 9px); }
 
-.presets { display: grid; gap: 6px; }
-.presets button { border-radius: 10px; text-align: left; }
 .fine { margin: 0; font-size: 0.75rem; color: var(--muted); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
+.dot.report { background: #f59e0b; border: 2px solid #78350f; }

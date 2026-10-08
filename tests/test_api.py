@@ -66,20 +66,15 @@ def test_summer_route_uses_forecast_heat():
     assert c["heat_factor"] == pytest.approx(0.525, abs=0.01)  # 31 C, 20% cloud
 
 
-def test_heatwave_scenario():
-    c = _route(heat_scenario="heatwave").json()["conditions"]
-    assert c["temperature_c"] == 38.0 and c["heat_factor"] == 1.5
-
-
 def test_monsoon_live_uses_lingering_rain():
     body = _route(mode="monsoon").json()
     # 30 mm at 14:00, one hour before "now" (15:00), half-life 1.5 h -> ~18.9 mm/h
     assert body["conditions"]["rain_mm_per_hour"] == pytest.approx(18.9, abs=0.1)
 
 
-def test_monsoon_heavy_two_wheeler():
-    body = _route(mode="monsoon", transport="two_wheeler", rain_scenario="heavy").json()
-    assert body["conditions"]["rain_mm_per_hour"] == weather.HEAVY_RAIN_MM_PER_HOUR
+def test_monsoon_two_wheeler():
+    body = _route(mode="monsoon", transport="two_wheeler").json()
+    assert body["conditions"]["transport"] == "two_wheeler"
     assert body["stats"]["direct"]["risk_streets"] is not None
 
 
@@ -98,7 +93,7 @@ def test_invalid_request_uses_error_shape():
 def test_live_rain_unavailable(monkeypatch):
     monkeypatch.setattr(weather, "_cache", {"value": None, "at": 0.0})
     monkeypatch.setattr(weather, "_fetch", lambda: (_ for _ in ()).throw(OSError("down")))
-    r = _route(mode="monsoon", rain_scenario="live")
+    r = _route(mode="monsoon")
     assert r.status_code == 503
     assert r.json()["error"]["code"] == "RAIN_UNAVAILABLE"
 
@@ -111,13 +106,13 @@ def test_summer_survives_weather_outage(monkeypatch):
 
 
 def test_flood_report_is_listed_and_avoided():
-    before = _route(mode="monsoon", rain_scenario="heavy").json()
+    before = _route(mode="monsoon").json()
     lon, lat = before["direct_route"]["geometry"]["coordinates"][1]
     r = client.post("/reports", json={"lat": lat, "lon": lon})
     assert r.status_code == 201 and r.json()["properties"]["strength"] == 1.0
     assert len(client.get("/reports").json()["features"]) == 1
 
-    after = _route(mode="monsoon", rain_scenario="heavy").json()
+    after = _route(mode="monsoon").json()
     assert after["conditions"]["active_reports"] == 1
     assert after["stats"]["safe"]["reported_streets"] == 0
 

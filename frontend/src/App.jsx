@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { getArea, getReports, getRoute, postReport } from "./api.js";
 import { comparison, conditionsText, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
-import { PRESETS } from "./presets.js";
 
 const inArea = (area, p) =>
   area && p.lon >= area.bbox[0] && p.lat >= area.bbox[1] && p.lon <= area.bbox[2] && p.lat <= area.bbox[3];
@@ -40,8 +39,6 @@ export default function App() {
   const [mode, setMode] = useState("summer");
   const [transport, setTransport] = useState("walk");
   const [time, setTime] = useState(""); // "" = leave now
-  const [rainScenario, setRainScenario] = useState("live");
-  const [heatScenario, setHeatScenario] = useState("live");
   const [reports, setReports] = useState(null);
   const [reporting, setReporting] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -70,7 +67,7 @@ export default function App() {
       setNotice(null);
       if (reporting) return report(p);
       if (area && !inArea(area, p)) {
-        setError(`That point is outside the covered area (${area.name}). Try a preset trip.`);
+        setError(`That point is outside the covered area (${area.name}).`);
         return;
       }
       setError(null);
@@ -95,21 +92,19 @@ export default function App() {
       destination,
       mode,
       transport,
-      rain_scenario: rainScenario,
-      heat_scenario: heatScenario,
       ...(time && { departure_time: todayAt(time) }),
     })
       .then((r) => !cancelled && setResult(r))
       .catch((e) => {
         if (cancelled) return;
         setResult(null);
-        setError(e.code === "RAIN_UNAVAILABLE" ? `${e.message}` : e.message);
+        setError(e.message);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [origin, destination, mode, transport, time, rainScenario, heatScenario, reports]);
+  }, [origin, destination, mode, transport, time, reports]);
 
   const useMyLocation = () => {
     if (!navigator.geolocation) return setError("Location isn't available in this browser.");
@@ -124,20 +119,10 @@ export default function App() {
     );
   };
 
-  const applyPreset = (p) => {
-    setMode(p.mode);
-    setTransport(p.transport);
-    setTime(p.time ?? "");
-    setRainScenario(p.rainScenario ?? "live");
-    setHeatScenario(p.heatScenario ?? "live");
-    setOrigin(p.origin);
-    setDestination(p.destination);
-  };
-
   const hint = reporting
     ? "Tap the flooded street on the map."
     : !origin
-    ? "Tap the map to set your start, or pick a demo trip."
+    ? "Tap the map to set your start."
     : !destination
       ? "Now tap your destination."
       : null;
@@ -164,14 +149,8 @@ export default function App() {
         <Toggle label="Travelling by" value={transport} onChange={setTransport}
           options={[["walk", "🚶 Walk"], ["two_wheeler", "🛵 Two-wheeler"]]} />
 
-        <div className="row">
-          {mode === "monsoon" ? (
-            <Toggle label="Rain" value={rainScenario} onChange={setRainScenario}
-              options={[["live", "Live"], ["heavy", "Heavy rain demo"]]} />
-          ) : (
-            <>
-            <Toggle label="Weather" value={heatScenario} onChange={setHeatScenario}
-              options={[["live", "Live"], ["heatwave", "Heatwave demo"]]} />
+        {mode === "summer" && (
+          <div className="row">
             <label className="time">
               Leaving at
               <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
@@ -179,9 +158,8 @@ export default function App() {
                 <button type="button" className="link" onClick={() => setTime("")}>now</button>
               )}
             </label>
-            </>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="row actions">
           <button type="button" onClick={useMyLocation}>📍 Use my location</button>
@@ -206,20 +184,16 @@ export default function App() {
               <Stats title="Safe route" s={result.stats.safe} mode={mode} swatch="safe" />
               <Stats title="Direct route" s={result.stats.direct} mode={mode} swatch="direct" />
               <p className="fine">{conditionsText(result.conditions, mode)}</p>
+              {reports?.features?.length > 0 && (
+                <p className="fine"><span className="dot report" aria-hidden="true" /> Reported flooding (fades over 3 h)</p>
+              )}
             </section>
           )}
         </div>
 
-        <section className="presets">
-          <h2>Demo trips</h2>
-          {PRESETS.map((p) => (
-            <button key={p.label} type="button" onClick={() => applyPreset(p)}>{p.label}</button>
-          ))}
-        </section>
-
         <footer className="fine">
           Covers {area?.name ?? "Koramangala, Bengaluru"}. Map © OpenStreetMap contributors.
-          Heights: Google Open Buildings. Elevation: Copernicus DEM. Rain: Open-Meteo.
+          Heights: Google Open Buildings. Elevation: Copernicus DEM. Weather: Open-Meteo (live).
         </footer>
       </aside>
     </div>

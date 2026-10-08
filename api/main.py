@@ -90,8 +90,6 @@ class RouteRequest(BaseModel):
     mode: Literal["summer", "monsoon"]
     transport: Literal["walk", "two_wheeler"] = "walk"
     departure_time: datetime | None = None
-    rain_scenario: Literal["live", "heavy"] = "live"
-    heat_scenario: Literal["live", "heatwave"] = "live"
 
 
 class ReportRequest(BaseModel):
@@ -127,20 +125,13 @@ def route(req: RouteRequest):
     departure = req.departure_time or datetime.now(TZ)
     departure = departure.replace(tzinfo=TZ) if departure.tzinfo is None else departure
     rain_mm, temperature, cloud, heat = 0.0, None, None, 1.0
-    if req.mode == "monsoon" and req.rain_scenario == "heavy":
-        rain_mm = weather.HEAVY_RAIN_MM_PER_HOUR
-    elif req.mode == "monsoon":
+    if req.mode == "monsoon":
         try:
             rain_mm = weather.effective_rain(weather.current())
         except weather.WeatherUnavailableError:
             raise ApiError(
-                503,
-                "RAIN_UNAVAILABLE",
-                "Live rainfall is unavailable. Try the heavy-rain scenario.",
+                503, "RAIN_UNAVAILABLE", "Live rainfall is unavailable. Please try again shortly."
             ) from None
-    elif req.heat_scenario == "heatwave":
-        temperature, cloud = weather.HEATWAVE["temperature_c"], weather.HEATWAVE["cloud_cover_pct"]
-        heat = heat_factor(temperature, cloud)
     else:
         try:
             temperature, cloud = weather.at(weather.current(), departure)

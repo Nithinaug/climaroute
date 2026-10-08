@@ -55,25 +55,35 @@ def nearest_edge(graph: nx.MultiDiGraph, lat: float, lon: float) -> str:
     return best
 
 
-def slot_index(graph: nx.MultiDiGraph, departure: datetime) -> int | None:
-    """Shade slot for the departure's local time, or None at night."""
+def slot_index(graph: nx.MultiDiGraph, departure: datetime) -> float | None:
+    """Fractional shade slot for the departure's local time (16:07 -> between the 16:00
+    and 16:15 slots), or None at night."""
     departure = departure.astimezone(ZoneInfo(TIMEZONE))
     h, m = map(int, graph.graph["slot_start"].split(":"))
-    minutes = departure.hour * 60 + departure.minute - (h * 60 + m)
-    slot = minutes // graph.graph["slot_minutes"]
+    minutes = departure.hour * 60 + departure.minute + departure.second / 60 - (h * 60 + m)
+    slot = minutes / graph.graph["slot_minutes"]
     return slot if 0 <= slot < graph.graph["slot_count"] else None
 
 
+def shade_at(d: dict, slot: float | None) -> float:
+    """Edge shade blended between the two nearest slots; night counts as shaded."""
+    if slot is None:
+        return 1.0
+    i = int(slot)
+    j = min(i + 1, len(d["shade"]) - 1)
+    frac = slot - i
+    return d["shade"][i] * (1 - frac) + d["shade"][j] * frac
+
+
 def edge_cost(
-    mode: str, transport: str, slot: int | None, rain_mm: float, heat: float = 1.0
+    mode: str, transport: str, slot: float | None, rain_mm: float, heat: float = 1.0
 ) -> EdgeCost:
     """Cost of one edge's attributes; None means the edge is blocked."""
     if mode == "summer":
         alpha = config.ALPHA[transport] * heat
 
         def summer(d: dict) -> float:
-            shade = 1.0 if slot is None else d["shade"][slot]
-            return d["length"] * (1 + alpha * (1 - shade))
+            return d["length"] * (1 + alpha * (1 - shade_at(d, slot)))
 
         return summer
 
@@ -150,7 +160,7 @@ def _stats(
         "reported_streets": len({d["edge_id"] for d in edges if d["edge_id"] in reports}),
     }
     if mode == "summer":
-        shaded = sum(d["length"] * (1.0 if slot is None else d["shade"][slot]) for d in edges)
+        shaded = sum(d["length"] * shade_at(d, slot) for d in edges)
         stats["shaded_pct"] = round(100 * shaded / distance) if distance else 0
     else:
         rf = rain_factor(rain_mm)

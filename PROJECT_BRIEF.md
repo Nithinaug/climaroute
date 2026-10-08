@@ -25,7 +25,7 @@ flood-risk streets"*.
 - 3 days, 4 people. Submission: demo video, README, write-up, architecture
   diagram, live link. No live pitch.
 - **Judges may open the live link days later with nobody around.** The app
-  must work standalone: preset demo trips, a built-in heavy-rain scenario,
+  must work standalone, on live data only (no demo scenarios),
   and clear messages for anything outside the covered area.
 
 ## Scope (deliberately small)
@@ -65,7 +65,7 @@ geometry work when a user searches. The precompute has three stages:
 
 ONLINE (per request)
 user -> frontend -> POST /route -> Lambda (loads both graphs once) -> A* -> 2 routes + stats
-                                     └─ Open-Meteo rainfall (cached 30 min)
+                                     └─ Open-Meteo weather (cached 10 min)
 ```
 
 Step 2 is the expensive part (every building's shadow × every time slot), so
@@ -81,7 +81,7 @@ tiles, which is the fallback if the AWS pipeline isn't ready.
 | Streets, buildings, trees, drinking water | OpenStreetMap via OSMnx | Two street networks: `network_type="walk"` and `network_type="drive"` (two-wheelers follow road rules, incl. one-ways). Projected to local UTM (`estimate_utm_crs`) |
 | Building heights | Google Open Buildings 2.5D Temporal, 2023 height band (4 m raster) | Free; download only the tile/clip covering the area |
 | Elevation | Copernicus GLO-30 DEM (AWS Open Data) | One tile covers the area |
-| Rainfall | Open-Meteo API | Live mm/hour; heavy-rain demo scenario = 50 mm/hour |
+| Weather | Open-Meteo API | Live rain (mm/hour, past 6 h), temperature and cloud cover forecast |
 | Known flood spots, extra trees, water points | Hand-marked GeoJSON | OSM has <50 trees and few water points here |
 
 **Building height priority:** OSM `height` → OSM `building:levels` × 3 m →
@@ -206,7 +206,7 @@ Only non-code prep unless the rules say pre-built code is allowed.
       date, source link). These become `known_flood_spots.geojson` and
       evidence for the write-up.
 - [ ] Sanity-check heights for 3-4 buildings someone knows.
-- [ ] Pick 3-4 candidate demo trips (see Demo plan).
+- [ ] Pick 3-4 trips for the demo video (see Demo plan).
 - [ ] Nithin: AWS account ready (done), Terraform installed (1.10+), state
       bucket created, practice deploy of FastAPI on Lambda with Terraform,
       Amazon Location API key test, Amplify test.
@@ -232,7 +232,7 @@ Only non-code prep unless the rules say pre-built code is allowed.
   the live URL. If not, freeze features and spend Day 3 fixing.
 
 **Day 3 — polish and submit**
-- Morning: preset trips, heavy-rain scenario, out-of-area and error
+- Morning: out-of-area and error
   messages, loading states, mobile layout check, warm-up ping.
 - **Feature freeze at midday.** After that, only bug fixes.
 - Afternoon: record demo video, write README and write-up, draw the
@@ -293,9 +293,8 @@ Must have:
 - Comparison card: e.g. "6 min longer · 65% shaded vs 20%" or "avoids 2
   flood-risk streets".
 - Summer: drinking-water points layer. Monsoon: known flood spots layer.
-- Preset demo trips (one tap each).
-- Clear states: loading, out-of-area (show the area and offer a preset trip),
-  no route, API error, rain unavailable (offer heavy-rain scenario).
+- Clear states: loading, out-of-area (show the area), no route, API error,
+  rain unavailable.
 - Mobile-first layout; works on a phone browser.
 - Accessibility basics: keyboard reachable controls, labels, colour is never
   the only signal (route legend + text).
@@ -350,7 +349,7 @@ Tests (automated):
 - Shade: one building + known sun position → expected shadow side and
   approximate length.
 - API: request validation, error shapes, example responses match Interfaces.
-- Smoke test script against the live URL: each preset trip returns 200.
+- Smoke test against the live URL: a few known trips return 200.
 
 Validation (by eye, before trusting results):
 - Plot shade for two slots (e.g. 09:00 and 15:00): shadows should fall
@@ -361,14 +360,15 @@ Validation (by eye, before trusting results):
 
 ## Demo plan
 
-- 3-4 preset trips that show clear differences, e.g.:
-  1. Summer, walk, 1-3 pm: shaded inner lanes vs exposed main road.
-  2. Monsoon, heavy rain, walk: detour around Sony World Signal / Ejipura.
-  3. Monsoon, heavy rain, two-wheeler: route avoids a street a pedestrian
-     could still use.
+- 3-4 trips that show clear differences under live conditions, e.g.:
+  1. Summer, walk, late afternoon on a hot day: shaded inner lanes vs exposed
+     main road (record when the live heat weight is high).
+  2. Monsoon, walk, during or just after real rain: detour around low-lying
+     streets near Sony World Signal / Ejipura.
+  3. Flood report: tap "Report flooding" on the route and show it re-route live.
   4. Out-of-area point: friendly message.
 - Demo video (2-3 min): problem (heat + flooding in Bengaluru, news clips or
-  stats) → the app on a phone → each preset → architecture in 20 seconds →
+  stats) → the app on a phone → each trip → architecture in 20 seconds →
   scaling story.
 
 ## Submission checklist
@@ -396,7 +396,7 @@ Validation (by eye, before trusting results):
 | Step Functions pipeline not ready | Local runner, same functions, same output |
 | Real routing not ready by Day 2 evening | Mock API stays; freeze features, fix only |
 | Lambda cold start slow | Small image, graph loaded once, warm-up ping |
-| Open-Meteo down | 30-min cache; heavy-rain scenario always works |
+| Open-Meteo down | 10-min cache (stale value reused); summer falls back to a default heat weight |
 | Amazon Location key/style problem | Free OpenFreeMap style for the base map |
 | Costs run away | API throttling, budget alerts, no provisioned concurrency |
 
@@ -584,7 +584,7 @@ def rain_factor(rain_mm_per_hour: float) -> float  # 0.0-1.0, non-decreasing, 0 
 ```
 
 `flood_risk = terrain_risk * rain_factor(rain)` per edge, at request time.
-Heavy-rain demo scenario = **50 mm/hour**. Live rain = Open-Meteo, cached 30 min
+Live rain = Open-Meteo, cached 10 min
 (api/weather.py): the larger of the current rate and each of the past 6 hours'
 rain decayed with a 1.5 h drainage half-life, so risk lingers after a storm.
 
@@ -614,10 +614,11 @@ Flood reports: strength 1.0 blocks the edge; lower strengths multiply its cost b
 
 - summer: `length * (1 + ALPHA * heat_factor * (1 - shade[slot]))`
 - monsoon: `length * (1 + BETA * flood_risk)`; edges with `flood_risk > BLOCK_THRESHOLD` are removed
-- `slot = floor((departure - slot_start) / slot_minutes)`. Outside 0..slot_count-1 (night):
-  shade is treated as 1.0 (no heat penalty).
+- `slot = (departure - slot_start) / slot_minutes` as a fraction; shade is blended
+  linearly between the two nearest slots (16:07 = 53% of 16:00 + 47% of 16:15), so it
+  changes minute by minute. Outside the slot window (night): shade is 1.0 (no heat penalty).
 - `heat_factor` comes from the forecast temperature and cloud cover at the departure
-  hour (or the heatwave scenario: 38 °C, clear = 1.5). `ALPHA`, `BETA`, `BLOCK_THRESHOLD` live in `routing/config.py`
+  hour. `ALPHA`, `BETA`, `BLOCK_THRESHOLD` live in `routing/config.py`
   as dicts keyed by transport (currently `BLOCK_THRESHOLD = {"walk": 0.85, "two_wheeler": 0.7}`);
   tuned so safe routes stay within ~30% of the shortest distance.
 - `duration_min` uses the transport's speed (section 0).
@@ -666,16 +667,13 @@ Request:
   "mode": "summer",
   "transport": "walk",
   "departure_time": "2026-10-08T14:30:00+05:30",
-  "rain_scenario": "live",
-  "heat_scenario": "live"
 }
 ```
 
 - `mode`: `"summer"` | `"monsoon"`
 - `transport`: optional, `"walk"` (default) | `"two_wheeler"`
 - `departure_time`: optional, ISO 8601 with offset; default = now.
-- `rain_scenario`: optional, `"live"` (default) | `"heavy"`; ignored in summer.
-- `heat_scenario`: optional, `"live"` (default) | `"heatwave"`; ignored in monsoon.
+- All weather is live (Open-Meteo); there are no demo scenarios.
 
 Response `200`:
 
@@ -737,7 +735,7 @@ Every non-200 response uses one shape:
 | 429  | `THROTTLED`    | API Gateway throttling |
 | 500  | `INTERNAL`     | anything else (details only in logs) |
 | 422  | `NOT_ON_STREET` | flood report more than 60 m from any street |
-| 503  | `RAIN_UNAVAILABLE` | Open-Meteo down with no cached value; frontend suggests the heavy-rain scenario (summer falls back to heat factor 1.0 instead) |
+| 503  | `RAIN_UNAVAILABLE` | Open-Meteo down with no cached value (summer falls back to heat factor 1.0 instead) |
 
 `message` is safe to show to users as-is.
 

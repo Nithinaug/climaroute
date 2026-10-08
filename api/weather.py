@@ -1,4 +1,4 @@
-"""Live weather from Open-Meteo (cached), plus the demo scenarios.
+"""Live weather from Open-Meteo (cached).
 
 Rain for flood risk lingers: past hours count with a drainage half-life, so streets stay
 risky for a while after a storm. Heat uses the forecast for the departure hour.
@@ -14,10 +14,8 @@ from zoneinfo import ZoneInfo
 
 from shared import area
 
-HEAVY_RAIN_MM_PER_HOUR = 50.0
-HEATWAVE = {"temperature_c": 38.0, "cloud_cover_pct": 0.0}
 DRAIN_HALF_LIFE_H = 1.5  # water on streets halves every 1.5 h after rain stops
-CACHE_SECONDS = 30 * 60
+CACHE_SECONDS = 10 * 60  # Open-Meteo refreshes every 15 min
 OPEN_METEO_URL = (
     "https://api.open-meteo.com/v1/forecast"
     f"?latitude={area.CENTER['lat']}&longitude={area.CENTER['lon']}"

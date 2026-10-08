@@ -6,7 +6,7 @@ import pytest
 from shapely.geometry import LineString
 
 from routing import NoRouteError, OutOfAreaError, find_routes
-from routing.routes import slot_index
+from routing.routes import shade_at, slot_index
 
 TZ = ZoneInfo("Asia/Kolkata")
 AFTERNOON = datetime(2026, 4, 15, 15, 0, tzinfo=TZ)  # slot 36
@@ -131,3 +131,11 @@ def test_faded_report_is_only_a_penalty():
 def test_cool_weather_means_no_heat_detour():
     r = _route(_graph(), heat=0.0)
     assert r["stats"]["safe"]["distance_m"] == r["stats"]["direct"]["distance_m"]
+
+
+def test_shade_blends_between_slots():
+    d = {"shade": [0.0, 1.0, 1.0]}
+    g = _graph()
+    when = datetime(2026, 4, 15, 6, 7, 30, tzinfo=TZ)  # halfway between 06:00 and 06:15
+    assert shade_at(d, slot_index(g, when)) == pytest.approx(0.5)
+    assert shade_at(d, None) == 1.0
