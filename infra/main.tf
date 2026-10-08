@@ -12,8 +12,14 @@ locals {
   sfn_arn   = "arn:aws:states:${var.region}:${local.account}:stateMachine:${local.sfn_name}"
   area_env  = { AREA_NAME = var.area_name, AREA_BBOX = var.area_bbox }
   # Weekly shade runs, staggered so two cities never share the Lambda concurrency limit
-  # (UTC; Monday 05:00 / 05:30 / 06:00 IST).
-  shade_utc = { default = "30 23 ? * SUN", delhi = "0 0 ? * MON", mumbai = "30 0 ? * MON" }
+  # (UTC; Monday 05:00, 05:30, 06:00, 06:30, 07:00 IST).
+  shade_utc = {
+    default   = "30 23 ? * SUN" # Bengaluru
+    delhi     = "0 0 ? * MON"
+    mumbai    = "30 0 ? * MON"
+    chennai   = "0 1 ? * MON"
+    hyderabad = "30 1 ? * MON"
+  }
 
   # name => handler, memory MB, timeout s
   functions = {
@@ -278,7 +284,7 @@ resource "aws_iam_role_policy" "scheduler" {
 
 resource "aws_cloudwatch_event_rule" "daily_shade" {
   name                = "${local.name}-daily-shade"
-  schedule_expression = "cron(${lookup(local.shade_utc, terraform.workspace, "0 1 ? * MON")} *)"
+  schedule_expression = "cron(${lookup(local.shade_utc, terraform.workspace, "0 2 ? * MON")} *)"
 }
 
 resource "aws_cloudwatch_event_target" "daily_shade" {

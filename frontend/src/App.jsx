@@ -212,9 +212,13 @@ export default function App() {
         </header>
 
         {cities.length > 1 && (
-          <Toggle label="City" value={area?.url}
-            onChange={(url) => chooseCity(cities.find((c) => c.url === url))}
-            options={cities.map((c) => [c.url, c.name])} />
+          <label className="city">
+            City
+            <select value={area?.url}
+              onChange={(e) => chooseCity(cities.find((c) => c.url === e.target.value))}>
+              {cities.map((c) => <option key={c.url} value={c.url}>{c.name}</option>)}
+            </select>
+          </label>
         )}
 
         <PlaceSearch label="From" place={origin}

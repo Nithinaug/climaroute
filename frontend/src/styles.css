@@ -67,3 +67,7 @@ button.link { border: 0; background: none; color: var(--teal); text-decoration: 
 .results button { width: 100%; text-align: left; border: 0; background: none; padding: 8px;
   border-radius: 6px; }
 .results button:hover, .results button:focus-visible { background: #f1f5f9; }
+
+.city { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.city select { font: inherit; font-size: 1rem; color: inherit; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; }
