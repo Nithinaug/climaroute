@@ -273,18 +273,6 @@ export default function App() {
           </label>
         )}
 
-        <div className="row actions">
-          <button type="button" onClick={useMyLocation}>📍 Use my location</button>
-          <button type="button" aria-pressed={reporting} onClick={() => setReporting((r) => !r)}>
-            🚩 Report flooding
-          </button>
-          {(origin || destination) && (
-            <button type="button" className="link" onClick={() => { setOrigin(null); setDestination(null); setResult(null); }}>
-              Clear
-            </button>
-          )}
-        </div>
-
         <div aria-live="polite">
           {hint && <p className="hint">{hint}</p>}
           {loading && <p className="hint">Finding the safest route…</p>}
@@ -312,6 +300,18 @@ export default function App() {
                 <p className="fine"><span className="dot report" aria-hidden="true" /> Reported flooding (fades over 3 h)</p>
               )}
             </section>
+          )}
+        </div>
+
+        <div className="row actions">
+          <button type="button" onClick={useMyLocation}>📍 Use my location</button>
+          <button type="button" aria-pressed={reporting} onClick={() => setReporting((r) => !r)}>
+            🚩 Report flooding
+          </button>
+          {(origin || destination) && (
+            <button type="button" className="link" onClick={() => { setOrigin(null); setDestination(null); setResult(null); }}>
+              Clear
+            </button>
           )}
         </div>
 
