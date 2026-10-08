@@ -1,0 +1,49 @@
+{
+  "Comment": "ClimaRoute shade pipeline: shade every tile in parallel, then merge into the graphs",
+  "StartAt": "ReadIndex",
+  "States": {
+    "ReadIndex": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:getObject",
+      "Parameters": { "Bucket": "${bucket}", "Key": "tiles/index.json" },
+      "ResultSelector": { "index.$": "States.StringToJson($.Body)" },
+      "Next": "ShadeTiles"
+    },
+    "ShadeTiles": {
+      "Type": "Map",
+      "ItemsPath": "$.index.tiles",
+      "ItemSelector": { "tile_id.$": "$$.Map.Item.Value" },
+      "MaxConcurrency": 50,
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS" },
+        "StartAt": "ShadeTile",
+        "States": {
+          "ShadeTile": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": { "FunctionName": "${shade_fn}", "Payload.$": "$" },
+            "OutputPath": "$.Payload",
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.TooManyRequestsException", "Lambda.ServiceException", "Lambda.SdkClientException"],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 3,
+                "BackoffRate": 2
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "ResultPath": null,
+      "Next": "Merge"
+    },
+    "Merge": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${merge_fn}" },
+      "OutputPath": "$.Payload",
+      "End": true
+    }
+  }
+}

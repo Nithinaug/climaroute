@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Data: local dev files stay out of git, except small fixtures
+data/*
+!data/fixtures/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Frontend
+node_modules/
+dist/
+.env*
+!.env.example
+
+# osmnx HTTP cache
+cache/

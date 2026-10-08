@@ -1,0 +1,9 @@
+*
+!requirements.txt
+!shared/
+!api/
+!pipeline/
+!routing/
+!shade/
+!monsoon/
+**/__pycache__

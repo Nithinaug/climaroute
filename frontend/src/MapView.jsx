@@ -1,0 +1,107 @@
+import { Map as MapLibreMap, NavigationControl, setWorkerUrl } from "maplibre-gl";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
+import { useEffect, useRef, useState } from "react";
+
+// Let Vite bundle MapLibre's worker; its default path doesn't survive bundling.
+setWorkerUrl(workerUrl);
+
+const STYLE_URL =
+  import.meta.env.VITE_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/liberty";
+const EMPTY = { type: "FeatureCollection", features: [] };
+const COLORS = { safe: "#0f766e", direct: "#64748b", origin: "#2563eb", destination: "#dc2626" };
+
+const bboxPolygon = ([w, s, e, n]) => ({
+  type: "Feature",
+  geometry: { type: "Polygon", coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] },
+  properties: {},
+});
+
+const point = (p, role) =>
+  p && { type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] }, properties: { role } };
+
+function addLayers(map) {
+  for (const id of ["area", "direct", "safe", "points", "water", "flood"].map((n) => `cr-${n}`)) {
+    map.addSource(id, { type: "geojson", data: EMPTY });
+  }
+  map.addLayer({ id: "cr-area", type: "line", source: "cr-area",
+    paint: { "line-color": "#0f766e", "line-width": 2, "line-dasharray": [2, 2] } });
+  map.addLayer({ id: "cr-flood", type: "circle", source: "cr-flood",
+    paint: { "circle-radius": 14, "circle-color": "#3b82f6", "circle-opacity": 0.35 } });
+  map.addLayer({ id: "cr-direct", type: "line", source: "cr-direct",
+    layout: { "line-cap": "round" },
+    paint: { "line-color": COLORS.direct, "line-width": 4, "line-dasharray": [1.5, 1.5] } });
+  map.addLayer({ id: "cr-safe", type: "line", source: "cr-safe",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": COLORS.safe, "line-width": 6 } });
+  map.addLayer({ id: "cr-water", type: "circle", source: "cr-water",
+    paint: { "circle-radius": 5, "circle-color": "#0ea5e9", "circle-stroke-width": 1.5,
+             "circle-stroke-color": "#fff" } });
+  map.addLayer({ id: "cr-points", type: "circle", source: "cr-points",
+    paint: { "circle-radius": 8, "circle-stroke-width": 2, "circle-stroke-color": "#fff",
+             "circle-color": ["match", ["get", "role"], "origin", COLORS.origin, COLORS.destination] } });
+}
+
+export default function MapView({ area, origin, destination, result, mode, onPick }) {
+  const container = useRef(null);
+  const mapRef = useRef(null);
+  const pickRef = useRef(onPick);
+  const [ready, setReady] = useState(false);
+  pickRef.current = onPick;
+
+  useEffect(() => {
+    const map = new MapLibreMap({
+      container: container.current,
+      style: STYLE_URL,
+      center: [77.624, 12.935],
+      zoom: 14,
+      attributionControl: { compact: true },
+    });
+    map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+    map.on("load", () => {
+      addLayers(map);
+      setReady(true);
+    });
+    map.on("click", (e) => pickRef.current({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
+    mapRef.current = map;
+    return () => map.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !area) return;
+    const map = mapRef.current;
+    map.getSource("cr-area").setData(bboxPolygon(area.bbox));
+    map.getSource("cr-water").setData(area.water_points ?? EMPTY);
+    map.getSource("cr-flood").setData(area.flood_spots ?? EMPTY);
+    const desktop = window.matchMedia("(min-width: 768px)").matches;
+    // Keep the area clear of the panel (left on desktop, bottom sheet on phones).
+    const padding = desktop
+      ? { top: 40, right: 40, bottom: 40, left: 400 }
+      : { top: 20, right: 20, bottom: window.innerHeight * 0.55, left: 20 };
+    map.fitBounds(area.bbox, { padding, duration: 0 });
+  }, [ready, area]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current;
+    map.setLayoutProperty("cr-water", "visibility", mode === "summer" ? "visible" : "none");
+    map.setLayoutProperty("cr-flood", "visibility", mode === "monsoon" ? "visible" : "none");
+  }, [ready, mode]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current;
+    const features = [point(origin, "origin"), point(destination, "destination")].filter(Boolean);
+    map.getSource("cr-points").setData({ type: "FeatureCollection", features });
+    map.getSource("cr-safe").setData(result?.safe_route ?? EMPTY);
+    map.getSource("cr-direct").setData(result?.direct_route ?? EMPTY);
+  }, [ready, origin, destination, result]);
+
+  return (
+    <div
+      ref={container}
+      className="map"
+      role="application"
+      aria-label="Map. Tap to set the start, then the destination."
+    />
+  );
+}

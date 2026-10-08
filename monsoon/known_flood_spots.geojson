@@ -1,0 +1,14 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [77.6265, 12.9367]},
+      "properties": {
+        "name": "Sony World Signal",
+        "note": "Approximate location. Verify on the map and add the news source link.",
+        "source": null
+      }
+    }
+  ]
+}
