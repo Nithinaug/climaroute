@@ -747,8 +747,6 @@ Crowd flood reports (DynamoDB `climaroute-flood-reports`, TTL on `expires_at`).
 FeatureCollection with `properties.age_min` and `properties.strength`. A report
 blocks its street for 1 h, then fades to nothing at 3 h.
 
-`RouteRequest` also takes `"sensitive": true` (elderly, children): heat weight x2 and rain x1.5.
-
 #### `POST /best-time`
 
 Same body as `/route`. Runs the summer route for now and every 30 min for 3 h and returns

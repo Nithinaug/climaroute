@@ -92,7 +92,6 @@ export default function App() {
   const [transport, setTransport] = useState("walk");
   const [time, setTime] = useState(""); // "" = leave now
   const [simulateRain, setSimulateRain] = useState(false);
-  const [sensitive, setSensitive] = useState(false);
   const [best, setBest] = useState(null);
   const [reports, setReports] = useState(null);
   const [reporting, setReporting] = useState(false);
@@ -169,7 +168,6 @@ export default function App() {
       transport,
       ...(time && { departure_time: todayAt(time) }),
       ...(mode === "monsoon" && simulateRain && { simulate_rain_mm_per_hour: SIMULATED_RAIN }),
-      sensitive,
     })
       .then((r) => !cancelled && setResult(r))
       .catch((e) => {
@@ -182,7 +180,7 @@ export default function App() {
       cancelled = true;
     };
   // Coordinates, not objects: adding a place name to a point must not re-route.
-  }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, simulateRain, sensitive, reports]);
+  }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, simulateRain, reports]);
 
   const findBestTime = () =>
     getBestTime({
@@ -190,7 +188,6 @@ export default function App() {
       destination: { lat: destination.lat, lon: destination.lon },
       mode: "summer",
       transport,
-      sensitive,
       ...(time && { departure_time: todayAt(time) }),
     })
       .then(setBest)
@@ -255,11 +252,6 @@ export default function App() {
           options={[["summer", "☀️ Summer"], ["monsoon", "🌧️ Monsoon"]]} />
         <Toggle label="Travelling by" value={transport} onChange={setTransport}
           options={[["walk", "🚶 Walk"], ["two_wheeler", "🛵 Two-wheeler"]]} />
-
-        <label className="simulate">
-          <input type="checkbox" checked={sensitive} onChange={(e) => setSensitive(e.target.checked)} />
-          Heat-sensitive (elderly, children)
-        </label>
 
         {mode === "monsoon" && (
           <label className="simulate">

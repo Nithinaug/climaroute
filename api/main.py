@@ -37,7 +37,6 @@ FLOOD_SPOTS = {  # this city's spots only
 }
 SPOT_POINTS = [tuple(reversed(f["geometry"]["coordinates"])) for f in FLOOD_SPOTS["features"]]
 FLOOD_SPOT_RADIUS_M = 60.0
-SENSITIVE_HEAT, SENSITIVE_RAIN = 2.0, 1.5
 BEST_TIME_STEP_MIN, BEST_TIME_STEPS = 30, 7  # now .. +3 h
 
 app = FastAPI(title="ClimaRoute API")
@@ -105,8 +104,6 @@ class RouteRequest(BaseModel):
     departure_time: datetime | None = None
     # Monsoon demo on a dry day: use this rainfall instead of the live value.
     simulate_rain_mm_per_hour: float | None = Field(default=None, ge=0, le=200)
-    # Elderly, children, health conditions: weigh heat and flooding more heavily.
-    sensitive: bool = False
 
 
 class ReportRequest(BaseModel):
@@ -181,10 +178,6 @@ def route(req: RouteRequest):
         except weather.WeatherUnavailableError:
             log.warning("weather unavailable; using default heat factor")
 
-    if req.sensitive:
-        heat *= SENSITIVE_HEAT
-        rain_mm *= SENSITIVE_RAIN
-
     active_reports = reports.active()
     try:
         result = find_routes(
@@ -213,7 +206,6 @@ def route(req: RouteRequest):
         "heat_factor": heat if req.mode == "summer" else None,
         "shade_date": graph(req.transport).meta.get("shade_date"),
         "active_reports": len(active_reports),
-        "sensitive": req.sensitive,
     }
     log.info(
         json.dumps(

@@ -175,12 +175,6 @@ def test_monsoon_simulated_rain_overrides_live():
     assert _route(mode="monsoon", simulate_rain_mm_per_hour=500).status_code == 422
 
 
-def test_sensitive_weighs_heat_more():
-    normal = _route(departure_time="2026-04-15T16:00:00+05:30").json()["conditions"]
-    sens = _route(departure_time="2026-04-15T16:00:00+05:30", sensitive=True).json()["conditions"]
-    assert sens["heat_factor"] == pytest.approx(normal["heat_factor"] * 2) and sens["sensitive"]
-
-
 def test_best_time_lists_next_three_hours():
     body = client.post(
         "/best-time",
