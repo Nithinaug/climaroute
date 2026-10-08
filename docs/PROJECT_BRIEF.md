@@ -34,11 +34,23 @@ flood-risk streets"*.
   two-wheeler riders are the most exposed to heat and street flooding
   (a scooter stalls in ~30 cm of water). Cars and public transport are
   future scope.
-- **Deployed cities: Bengaluru** (bbox 77.46,12.83,77.78,13.14) **and Delhi**
-  (77.0,28.45,77.35,28.8). Each city is its own copy of the backend (Terraform
-  workspace: `default` = Bengaluru, `delhi`), built from the same code and image with
-  `AREA_NAME` / `AREA_BBOX`. The frontend lists every city's API in `VITE_API_URLS`
-  and switches between them.
+- **Deployed cities: Bengaluru, Delhi, Mumbai, Chennai, Hyderabad.** Each city is its
+  own copy of the backend (Terraform workspace: `default` = Bengaluru, then `delhi`,
+  `mumbai`, `chennai`, `hyderabad`), built from the same code and images with
+  `AREA_NAME` / `AREA_BBOX` / `OSM_EXTRACT_URL`. The UTM zone is derived from the
+  longitude (43N for most, 44N for Chennai and Hyderabad). The frontend lists every
+  city's API in `VITE_API_URLS` and switches between them (city kept in the URL hash).
+
+  | Workspace | `area_bbox` | Geofabrik extract |
+  |---|---|---|
+  | default (Bengaluru) | 77.46,12.83,77.78,13.14 | southern-zone |
+  | delhi | 77.0,28.45,77.35,28.8 | northern-zone |
+  | mumbai | 72.77,18.89,73.0,19.3 | western-zone |
+  | chennai | 80.15,12.92,80.32,13.23 | southern-zone |
+  | hyderabad | 78.3,17.3,78.6,17.56 | southern-zone |
+
+  Run at most 2 cities' shade pipelines at once (2 × `MaxConcurrency` 150 within the
+  account's 400 Lambda limit); weekly runs are staggered 30 min apart from 05:00 IST.
 - **First area (development): Koramangala, Bengaluru**, about 2 × 2 km around 4th to 6th Block,
   Sony World Signal and Ejipura. Chosen because:
   - it's a well-known waterlogging area, so our terrain model can be checked
@@ -84,7 +96,8 @@ tiles, which is the fallback if the AWS pipeline isn't ready.
 
 | Data | Source | Notes |
 |---|---|---|
-| Streets, buildings, trees, drinking water | OpenStreetMap via OSMnx | Two street networks: `network_type="walk"` and `network_type="drive"` (two-wheelers follow road rules, incl. one-ways). Projected to local UTM (`estimate_utm_crs`) |
+| Building footprints | Overture Maps buildings (AWS Open Data, us-west-2), read with DuckDB for the city bbox; cached at `raw/<bbox>/buildings_overture.pkl` | Includes OSM, Microsoft and Google footprints (4x OSM alone in Delhi) |
+| Streets, trees, drinking water | OpenStreetMap via OSMnx | Two street networks: `network_type="walk"` and `network_type="drive"` (two-wheelers follow road rules, incl. one-ways). Projected to local UTM (`estimate_utm_crs`) |
 | Building heights | Google Open Buildings 2.5D Temporal, 2023 height band (4 m raster) | Free; download only the tile/clip covering the area |
 | Elevation | Copernicus GLO-30 DEM (AWS Open Data) | One tile covers the area |
 | Weather | Open-Meteo API | Live rain (mm/hour, past 6 h), temperature and cloud cover forecast |
@@ -258,7 +271,7 @@ Only non-code prep unless the rules say pre-built code is allowed.
   - `requirements-dev.txt` — tests: `-r requirements.txt` plus httpx,
     networkx, pytest, ruff
   - `requirements-prepare.txt` — prepare image / laptop: `-r requirements-dev.txt`
-    plus osmnx, geopandas, rasterio, pysheds, osmium (and the `osmium-tool` CLI
+    plus osmnx, geopandas, rasterio, pysheds, osmium, duckdb (and the `osmium-tool` CLI
     in the image)
 - Frontend: `cd frontend && npm install && npm run dev`.
 - Local API: `uvicorn api.main:app --reload` with `DATA_BUCKET` unset (reads
@@ -805,11 +818,18 @@ Small area on a laptop instead (Overpass, no Fargate): `AREA_BBOX=... python -m 
 then `python -m pipeline.run_local`. With `OSM_REGION_PBF=<file.osm.pbf>` set, prepare
 reads a local extract instead of Overpass (needs the `osmium` CLI).
 
-Current numbers (Bengaluru): walk graph 238,555 nodes / 614,194 edges; two-wheeler
-204,510 / 509,361; 801,624 shade casters (783,663 heights from Open Buildings,
-1,350 from OSM, 7,916 defaults) + tree canopies; 5,025 tiles; 324,256 streets with
-terrain risk. A cross-city route takes ~0.4 s end to end. Prepare (Fargate,
-4 vCPU / 30 GB) ~25 min; a full shade run ~$1.70 of Lambda time.
+Current numbers (buildings from Overture, except Bengaluru which still uses OSM):
+
+| City | Walk edges | Buildings | Tiles | Streets with terrain risk |
+|---|---|---|---|---|
+| Bengaluru | 614,194 | 801,624 | 5,025 | 324,256 |
+| Delhi | 653,658 | 1,393,454 | 4,842 | 338,292 |
+| Mumbai | 153,690 | 527,461 | 2,138 | 83,082 |
+| Chennai | 233,758 | 764,566 | 2,169 | 119,988 |
+| Hyderabad | 544,742 | 1,250,471 | 3,861 | 278,772 |
+
+A cross-city route takes ~0.4 s end to end. Prepare (Fargate, 4 vCPU / 30 GB)
+25-45 min per city; a shade run ~$1-2.5 of Lambda time (shade-tile Lambda 2048 MB).
 
 ### Open items for kickoff
 

@@ -10,6 +10,16 @@ Safer routes through Indian cities in extreme weather, for people walking or on 
 Every answer shows the safe route next to the direct route, so you can see what the detour buys you
 (e.g. "34% shaded vs 4%", "0 flood-prone streets vs 3").
 
+Live for five cities:
+
+| City | Area covered | Street segments (walk) | Buildings | Shade tiles |
+|---|---|---|---|---|
+| Bengaluru | 77.46–77.78 E, 12.83–13.14 N | 614k | 802k | 5,025 |
+| Delhi | 77.00–77.35 E, 28.45–28.80 N | 654k | 1.39M | 4,842 |
+| Mumbai | 72.77–73.00 E, 18.89–19.30 N | 154k | 527k | 2,138 |
+| Chennai | 80.15–80.32 E, 12.92–13.23 N | 234k | 765k | 2,169 |
+| Hyderabad | 78.30–78.60 E, 17.30–17.56 N | 545k | 1.25M | 3,861 |
+
 ## How it works
 
 ```
@@ -57,7 +67,8 @@ All infrastructure is Terraform (`infra/`).
 
 | Data | Source |
 |---|---|
-| Streets, buildings, trees | OpenStreetMap (Geofabrik extract) |
+| Streets, trees, drinking water | OpenStreetMap (Geofabrik extract) |
+| Building footprints | Overture Maps (OSM + Microsoft + Google, AWS Open Data) |
 | Building heights | Google Open Buildings 2.5D Temporal (2023) |
 | Elevation | Copernicus GLO-30 DEM (AWS Open Data) |
 | Weather | Open-Meteo (live) |
@@ -87,5 +98,10 @@ terraform -chdir=infra apply -var image_tag=$TAG -var area_name=Bengaluru \
 infra/run_prepare.sh                             # build the area's data
 aws stepfunctions start-execution --state-machine-arn $(terraform -chdir=infra output -raw pipeline_arn)
 ```
+
+Each city is its own copy of the backend in a Terraform workspace (`default` is Bengaluru):
+`terraform -chdir=infra workspace new delhi`, then the same apply with that city's `area_name`,
+`area_bbox` and `osm_extract_url` (Geofabrik zone). Add its `api_url` to `VITE_API_URLS` in
+`frontend/.env.production`.
 
 Design notes for contributors: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
