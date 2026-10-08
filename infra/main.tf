@@ -258,7 +258,7 @@ resource "aws_iam_role_policy" "scheduler" {
 
 resource "aws_cloudwatch_event_rule" "daily_shade" {
   name                = "${local.name}-daily-shade"
-  schedule_expression = "cron(30 23 * * ? *)" # 23:30 UTC = 05:00 IST
+  schedule_expression = "cron(30 23 ? * SUN *)" # Sunday 23:30 UTC = Monday 05:00 IST
 }
 
 resource "aws_cloudwatch_event_target" "daily_shade" {

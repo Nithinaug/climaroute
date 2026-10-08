@@ -13,13 +13,13 @@ Every answer shows the safe route next to the direct route, so you can see what 
 ## How it works
 
 ```
-OFFLINE (daily)                                              ONLINE (per request)
+OFFLINE (weekly)                                             ONLINE (per request)
 
 ECS Fargate: prepare/                                        React + MapLibre (Amplify)
   OSM streets + buildings, building heights,                      │ POST /route
   elevation -> street graphs + 500 m tiles  ──► S3 ◄──┐            ▼
                                                       │      API Gateway -> Lambda (FastAPI)
-Step Functions (05:00 IST every day)                  │        loads graphs from S3, Dijkstra on
+Step Functions (Mondays 05:00 IST)                    │        loads graphs from S3, Dijkstra on
   SetSun -> Distributed Map: one Lambda per tile ─────┘        numpy/scipy, live weather
   computes building shadows for every 15 min -> Merge          (Open-Meteo), flood reports (DynamoDB)
 ```
@@ -43,11 +43,11 @@ request (length × a heat or flood penalty, never below the length) and routed w
 |---|---|
 | Lambda (container image) | API, per-tile shade computation, pipeline steps |
 | API Gateway (HTTP API) | Public API with throttling |
-| Step Functions (Distributed Map) | Daily shade pipeline over all tiles |
+| Step Functions (Distributed Map) | Weekly shade pipeline over all tiles |
 | ECS Fargate | Building an area's data (too large and long-running for Lambda) |
 | S3 | Raw data, tiles, street graphs |
 | DynamoDB | Crowd flood reports (TTL expiry) |
-| EventBridge | Daily pipeline schedule, API warm-up |
+| EventBridge | Weekly pipeline schedule, API warm-up |
 | ECR, CloudWatch | Images, logs |
 | Amplify Hosting | Frontend |
 

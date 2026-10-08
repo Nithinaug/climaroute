@@ -34,7 +34,9 @@ flood-risk streets"*.
   two-wheeler riders are the most exposed to heat and street flooding
   (a scooter stalls in ~30 cm of water). Cars and public transport are
   future scope.
-- **One area: Koramangala, Bengaluru**, about 2 × 2 km around 4th to 6th Block,
+- **Deployed area: all of Bengaluru** (bbox 77.46,12.83,77.78,13.14). The area is
+  configuration (`AREA_NAME`, `AREA_BBOX`), so any city can be built the same way.
+- **First area (development): Koramangala, Bengaluru**, about 2 × 2 km around 4th to 6th Block,
   Sony World Signal and Ejipura. Chosen because:
   - it's a well-known waterlogging area, so our terrain model can be checked
     against real flood reports;
@@ -52,7 +54,8 @@ Everything heavy is **precomputed** for the area. Nothing calls OSM or does
 geometry work when a user searches. The precompute has three stages:
 
 ```
-1. PREPARE (laptop script)
+1. PREPARE (ECS Fargate task, or laptop for a small area)
+   Geofabrik OSM extract clipped with osmium (Overpass for small areas),
    OSM streets + buildings, Open Buildings heights, sun positions
      -> split area into tiles -> tiles/<id>/input.json + base graphs   -> S3
    Copernicus DEM -> terrain risk per edge                             -> S3
@@ -135,6 +138,7 @@ Sanity-check a few known buildings before trusting it.
 | Frontend | React + Vite + MapLibre GL JS; Amazon Location Service for map tiles and place search; hosted on AWS Amplify |
 | API | FastAPI on AWS Lambda (container image, Mangum adapter), behind API Gateway HTTP API |
 | Precompute pipeline | AWS Step Functions (Distributed Map over tiles) + Lambda |
+| Area build (prepare) | ECS Fargate task (4 vCPU / 30 GB), started on demand; too long and memory-heavy for Lambda |
 | Infrastructure as code | Terraform (S3 state backend) for all AWS resources, plus a few one-time console steps. No SAM, CDK or SDK-based deploy tooling |
 | Storage | S3 for raw data, tiles and the two graph files |
 | Region | ap-south-1 (Mumbai) |
@@ -150,7 +154,7 @@ Key decisions:
   run locally in a loop, so the pipeline can be developed and tested without
   AWS.
 - The tile-shade Lambda only needs shapely + numpy: sun positions are computed
-  in the prepare step and passed in, so pvlib/pandas stay on the laptop.
+  in the prepare step and passed in, so heavy libraries stay in the prepare image.
 - The Lambda image stays small: shapely, numpy, scipy only (networkx is used
   only offline and in tests). **No
   GDAL, rasterio, osmnx, geopandas or pandas** in `routing/` or `api/`. These
@@ -250,8 +254,9 @@ Only non-code prep unless the rules say pre-built code is allowed.
     numpy, scipy
   - `requirements-dev.txt` — tests: `-r requirements.txt` plus httpx,
     networkx, pytest, ruff
-  - `requirements-prepare.txt` — laptop only: `-r requirements.txt` plus
-    osmnx, geopandas, rasterio, pvlib, pysheds
+  - `requirements-prepare.txt` — prepare image / laptop: `-r requirements-dev.txt`
+    plus osmnx, geopandas, rasterio, pysheds, osmium (and the `osmium-tool` CLI
+    in the image)
 - Frontend: `cd frontend && npm install && npm run dev`.
 - Local API: `uvicorn api.main:app --reload` with `DATA_BUCKET` unset (reads
   `./data/`).
@@ -312,7 +317,7 @@ PWA install.
   memory) behind API Gateway HTTP API. CORS from `ALLOWED_ORIGINS`.
   Throttling on the stage (e.g. 20 req/s, burst 40).
 - **Pipeline:** tile-shade Lambda + merge Lambda + Step Functions workflow
-  (Distributed Map, `MaxConcurrency` 50). The state machine definition lives
+  (Distributed Map, `MaxConcurrency` 150). The state machine definition lives
   in `infra/pipeline.asl.json`, loaded by Terraform with `templatefile`.
 - **One container image, three Lambdas:** API, tile-shade and merge share
   the image in ECR; each Lambda sets its own handler via `image_config`.
@@ -333,9 +338,10 @@ PWA install.
   search, restricted to the Amplify domain and localhost.
 - **Warm-up:** EventBridge schedule invokes the API Lambda every 5 minutes
   (preloading graphs) so judges rarely hit a cold start.
-- **Daily shade:** EventBridge runs the Step Functions pipeline at 05:00 IST.
+- **Weekly shade:** EventBridge runs the Step Functions pipeline on Mondays at 05:00 IST (the sun moves <0.5° a day; weekly keeps the city run within the Lambda free tier). Run it by hand any time.
   `SetSun` rewrites `tiles/index.json` for today's sun (built-in solar position,
-  no pvlib), then tiles are shaded in parallel and merged (~45 s for Koramangala).
+  no pvlib), then tiles are shaded in parallel and merged (~45 s for Koramangala; Bengaluru's 5,025 tiles
+  took 29 min at `MaxConcurrency` 50, ~10 min at 150, then merge ~3.5 min).
   The API re-reads graphs every 10 minutes. Manual run for any date:
   `aws stepfunctions start-execution --state-machine-arn <arn> --input '{"date":"2026-04-15"}'`.
 - **Flood reports:** DynamoDB on-demand table with TTL.
@@ -441,7 +447,7 @@ prepare -> tiles -> shade (per tile) -> merge (+ monsoon terrain) -> walk.npz + 
 | Python         | 3.12. Pinned versions in root `requirements.txt` (shapely, numpy, scipy). |
 | Transport      | `"walk"` \| `"two_wheeler"` everywhere (API, function args, file names). |
 | Speeds         | walk 1.3 m/s, two_wheeler 5.0 m/s (~18 km/h city average). `duration_min = distance_m / speed / 60`. |
-| Area           | Koramangala, Bengaluru (~2 × 2 km). Graph covers it plus a ~300 m buffer. |
+| Area           | Env `AREA_NAME` / `AREA_BBOX` (Terraform vars `area_name` / `area_bbox`, passed to the Lambdas and the prepare task). Deployed: Bengaluru. Graph covers the bbox plus a ~400 m buffer. Raw caches live under `raw/<bbox>/`. |
 
 ### 1. Storage
 
@@ -461,10 +467,10 @@ write_bytes("graph/walk.npz", payload)     # bytes -> None
 
 | Key                            | Written by       | Read by        | Format |
 |--------------------------------|------------------|----------------|--------|
-| `raw/osm_walk.pkl`, `raw/osm_drive.pkl` | prepare | prepare | cached unprojected osmnx graphs |
-| `raw/buildings.geojson`, `raw/trees.geojson`, `raw/water_points.geojson` | prepare | prepare | cached OSM features, WGS84 |
-| `raw/building_heights.tif`     | prepare          | prepare (offline only) | GeoTIFF, Google Open Buildings 2.5D Temporal, 2023 height band, 2 m, clipped to area |
-| `raw/dem.tif`                  | monsoon          | monsoon (offline only) | GeoTIFF, Copernicus GLO-30 clipped around the area |
+| `raw/<bbox>/osm_walk.pkl`, `raw/<bbox>/osm_drive.pkl` (Overpass mode only) | prepare | prepare | cached unprojected osmnx graphs |
+| `raw/<bbox>/buildings.geojson`, `trees.geojson`, `water_points.geojson` (Overpass mode only) | prepare | prepare | cached OSM features, WGS84 |
+| `raw/<bbox>/building_heights.tif` | prepare          | prepare (offline only) | GeoTIFF, Google Open Buildings 2.5D Temporal, 2023 height band, 2 m, clipped to area |
+| `raw/<bbox>/dem.tif` | monsoon          | monsoon (offline only) | GeoTIFF, Copernicus GLO-30 clipped around the area |
 | `tiles/index.json`             | prepare          | pipeline       | see section 3 |
 | `tiles/<tile_id>/input.json`   | prepare          | shade          | see section 3 |
 | `tiles/<tile_id>/shade.json`   | shade            | merge          | see section 3 |
@@ -499,7 +505,7 @@ the shortest.
 | `crs`          | str   | `"EPSG:32643"`              |
 | `area_name`    | str   | `"Koramangala, Bengaluru"`  |
 | `transport`    | str   | `"walk"` or `"two_wheeler"` |
-| `shade_date`   | str   | `"2026-10-08"` (date the shade was computed for; set by the pipeline daily) |
+| `shade_date`   | str   | `"2026-10-08"` (date the shade was computed for; set by each pipeline run, weekly) |
 | `slot_start`   | str   | `"06:00"` (local time of slot 0) |
 | `slot_minutes` | int   | `15`                        |
 | `slot_count`   | int   | `52` (06:00 to 18:45)       |
@@ -580,7 +586,7 @@ def merge_graph(
   `compute_tile_shade`, writes each `shade.json`, then merges. Uses
   `shared.storage` only (set `DATA_BUCKET` to run it against S3).
 - AWS (Nithin): Step Functions Distributed Map over `tiles`, one Lambda per
-  tile calling `compute_tile_shade`; `MaxConcurrency` 50; then a merge
+  tile calling `compute_tile_shade`; `MaxConcurrency` 150; then a merge
   Lambda calling `merge_graph`. Same functions, same files.
 
 ### 4. Rain factor (monsoon/)
@@ -750,7 +756,7 @@ Every non-200 response uses one shape:
 | Folder      | Owner      | Notes |
 |-------------|------------|-------|
 | `shared/`   | Nithin     | `storage.py` only |
-| `prepare/`  | built      | laptop script: OSM, heights, sun positions, tiles, base graphs |
+| `prepare/`  | built      | Fargate task (or laptop): OSM via pbf/Overpass, heights, sun positions, tiles, base graphs |
 | `shade/`    | built      | `compute_tile_shade`, `merge_graph` |
 | `pipeline/` | Nithin     | Lambda handlers + local runner wrapping shade/ |
 | `monsoon/`  | built      | offline DEM work + `rain_factor` |
@@ -765,21 +771,29 @@ Every non-200 response uses one shape:
 Everything below is built and deployed; no stand-ins remain.
 
 ```bash
-# 1. Prepare (laptop, ~2 min with cached downloads): OSM, heights, sun, tiles, terrain
-uv pip install -r requirements-prepare.txt
-python -m prepare.build
-# 2. Upload to S3 and run the Step Functions shade pipeline (or: python -m pipeline.run_local)
-aws s3 sync data/ s3://climaroute-data-723949188124/ --exclude "graph/walk.npz" --exclude "graph/two_wheeler.npz"
-aws stepfunctions start-execution --state-machine-arn <pipeline_arn output>
-# 3. Deploy API/pipeline code
-TAG=$(infra/push_image.sh) && terraform -chdir=infra apply -var image_tag=$TAG
-# 4. Frontend
+# 1. Images (Lambda + Fargate prepare)
+infra/push_image.sh prepare
+TAG=$(infra/push_image.sh)
+# 2. Infrastructure, with the area to cover (always pass the area vars)
+terraform -chdir=infra apply -var image_tag=$TAG -var area_name=Bengaluru \
+  -var area_bbox=77.46,12.83,77.78,13.14
+# 3. Build the area's data on Fargate (~25 min for Bengaluru; logs: /ecs/climaroute-prepare)
+infra/run_prepare.sh
+# 4. Shade + merge (also runs automatically on Mondays 05:00 IST)
+aws stepfunctions start-execution --state-machine-arn $(terraform -chdir=infra output -raw pipeline_arn)
+# 5. Frontend
 cd frontend && npm install && npm run dev   # needs frontend/.env.local (see .env.example)
 ```
 
-Current numbers (Koramangala): walk graph 1,682 nodes / 4,492 edges; two-wheeler
-1,208 / 3,047; 17,136 buildings (17,072 heights from Open Buildings, 7 from OSM,
-57 defaults) + tree canopies; 34 tiles. Routing takes 1-7 ms per request.
+Small area on a laptop instead (Overpass, no Fargate): `AREA_BBOX=... python -m prepare.build`
+then `python -m pipeline.run_local`. With `OSM_REGION_PBF=<file.osm.pbf>` set, prepare
+reads a local extract instead of Overpass (needs the `osmium` CLI).
+
+Current numbers (Bengaluru): walk graph 238,555 nodes / 614,194 edges; two-wheeler
+204,510 / 509,361; 801,624 shade casters (783,663 heights from Open Buildings,
+1,350 from OSM, 7,916 defaults) + tree canopies; 5,025 tiles; 324,256 streets with
+terrain risk. A cross-city route takes ~0.4 s end to end. Prepare (Fargate,
+4 vCPU / 30 GB) ~25 min; a full shade run ~$1.70 of Lambda time.
 
 ### Open items for kickoff
 

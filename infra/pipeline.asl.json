@@ -20,7 +20,7 @@
       "Type": "Map",
       "ItemsPath": "$.index.tiles",
       "ItemSelector": { "tile_id.$": "$$.Map.Item.Value" },
-      "MaxConcurrency": 50,
+      "MaxConcurrency": 150,
       "ItemProcessor": {
         "ProcessorConfig": { "Mode": "DISTRIBUTED", "ExecutionType": "EXPRESS" },
         "StartAt": "ShadeTile",
