@@ -8,7 +8,7 @@ setWorkerUrl(workerUrl);
 const STYLE_URL =
   import.meta.env.VITE_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/liberty";
 const EMPTY = { type: "FeatureCollection", features: [] };
-const COLORS = { safe: "#0f766e", direct: "#64748b", origin: "#2563eb", destination: "#b91c1c" };
+const COLORS = { safe: "#16a34a", direct: "#dc2626", origin: "#2563eb", destination: "#1f2937" };
 
 const bboxPolygon = ([w, s, e, n]) => ({
   type: "Feature",
@@ -33,7 +33,7 @@ function addLayers(map) {
   map.addLayer({ id: "cr-safe", type: "line", source: "cr-safe",
     layout: { "line-cap": "round", "line-join": "round" },
     paint: { "line-color": COLORS.safe, "line-width": 6 } });
-  map.addLayer({ id: "cr-water", type: "circle", source: "cr-water",
+  map.addLayer({ id: "cr-water", type: "circle", source: "cr-water", minzoom: 14,
     paint: { "circle-radius": 5, "circle-color": "#0ea5e9", "circle-stroke-width": 1.5,
              "circle-stroke-color": "#fff" } });
   // Reports fade as they age.
@@ -57,8 +57,8 @@ export default function MapView({ area, origin, destination, result, mode, repor
     const map = new MapLibreMap({
       container: container.current,
       style: STYLE_URL,
-      center: [77.624, 12.935],
-      zoom: 14,
+      center: [77.62, 12.98],
+      zoom: 11,
       attributionControl: { compact: true },
     });
     map.addControl(new NavigationControl({ showCompass: false }), "top-right");
@@ -80,8 +80,8 @@ export default function MapView({ area, origin, destination, result, mode, repor
     const desktop = window.matchMedia("(min-width: 768px)").matches;
     // Keep the area clear of the panel (left on desktop, bottom sheet on phones).
     const padding = desktop
-      ? { top: 40, right: 40, bottom: 40, left: 400 }
-      : { top: 20, right: 20, bottom: window.innerHeight * 0.55, left: 20 };
+      ? { top: 8, right: 56, bottom: 8, left: 416 }
+      : { top: 8, right: 8, bottom: window.innerHeight * 0.55, left: 8 };
     map.fitBounds(area.bbox, { padding, duration: 0 });
   }, [ready, area]);
 

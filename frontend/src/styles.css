@@ -50,8 +50,8 @@ button.link { border: 0; background: none; color: var(--teal); text-decoration: 
 .stat { display: grid; grid-template-columns: 22px auto; column-gap: 6px; font-size: 0.9rem; }
 .stat span:last-child { grid-column: 2; color: var(--muted); }
 .swatch { width: 18px; height: 6px; border-radius: 3px; margin-top: 7px; grid-row: span 2; }
-.swatch.safe { background: var(--teal); }
-.swatch.direct { background: repeating-linear-gradient(90deg, #64748b 0 5px, transparent 5px 9px); }
+.swatch.safe { background: #16a34a; }
+.swatch.direct { background: repeating-linear-gradient(90deg, #dc2626 0 5px, transparent 5px 9px); }
 
 .fine { margin: 0; font-size: 0.75rem; color: var(--muted); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
