@@ -13,10 +13,25 @@ const COLORS = { safe: "#16a34a", direct: "#dc2626", origin: "#2563eb", destinat
 const point = (p, role) =>
   p && { type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] }, properties: { role } };
 
+// Everything except the city box, to grey out areas without coverage.
+const outside = ([w, s, e, n]) => ({
+  type: "Feature",
+  geometry: {
+    type: "Polygon",
+    coordinates: [
+      [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]],
+      [[w, s], [w, n], [e, n], [e, s], [w, s]],
+    ],
+  },
+  properties: {},
+});
+
 function addLayers(map) {
-  for (const id of ["direct", "safe", "points", "water", "flood", "reports"].map((n) => `cr-${n}`)) {
+  for (const id of ["outside", "direct", "safe", "points", "water", "flood", "reports"].map((n) => `cr-${n}`)) {
     map.addSource(id, { type: "geojson", data: EMPTY });
   }
+  map.addLayer({ id: "cr-outside", type: "fill", source: "cr-outside",
+    paint: { "fill-color": "#334155", "fill-opacity": 0.35 } });
   map.addLayer({ id: "cr-flood", type: "circle", source: "cr-flood",
     paint: { "circle-radius": 14, "circle-color": "#3b82f6", "circle-opacity": 0.35 } });
   map.addLayer({ id: "cr-direct", type: "line", source: "cr-direct",
@@ -73,7 +88,8 @@ export default function MapView({ area, origin, destination, result, mode, repor
     const padding = desktop
       ? { top: 8, right: 56, bottom: 8, left: 416 }
       : { top: 8, right: 8, bottom: window.innerHeight * 0.55, left: 8 };
-    // Lock the view to the city: it fills the screen and can't be panned or zoomed away.
+    map.getSource("cr-outside").setData(outside(area.bbox));
+    // The whole city fits on screen; the view can't zoom out or pan beyond that.
     map.setMaxBounds(null);
     map.setMinZoom(null);
     map.fitBounds(area.bbox, { padding, duration: 0 });

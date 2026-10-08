@@ -20,6 +20,7 @@ function Toggle({ label, value, options, onChange }) {
 }
 
 const MAP_POINT = "Point on map";
+const slug = (name) => name.toLowerCase().split(",")[0].trim().replace(/\s+/g, "-");
 
 function PlaceSearch({ label, place, onSelect }) {
   const [text, setText] = useState("");
@@ -98,6 +99,7 @@ export default function App() {
 
   const chooseCity = useCallback((city) => {
     setCityApi(city.url);
+    history.replaceState(null, "", `#${slug(city.name)}`);
     setArea(city);
     setOrigin(null);
     setDestination(null);
@@ -113,7 +115,7 @@ export default function App() {
         const ok = found.filter(Boolean);
         if (!ok.length) throw new Error("Can't reach the server. Check your connection and try again.");
         setCities(ok);
-        chooseCity(ok[0]);
+        chooseCity(ok.find((c) => `#${slug(c.name)}` === location.hash) ?? ok[0]);
       })
       .catch((e) => setError(e.message));
   }, [chooseCity]);
@@ -133,10 +135,7 @@ export default function App() {
     (p) => {
       setNotice(null);
       if (reporting) return report(p);
-      if (area && !inArea(area, p)) {
-        setError(`That point is outside the covered area (${area.name}).`);
-        return;
-      }
+      if (area && !inArea(area, p)) return; // greyed out on the map
       setError(null);
       if (!origin || destination) {
         setOrigin(p);
@@ -177,10 +176,12 @@ export default function App() {
     if (!navigator.geolocation) return setError("Location isn't available in this browser.");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        const p = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        if (area && !inArea(area, p)) return setError(`You're outside ${area.name}.`);
         setDestination(null);
         setResult(null);
         setOrigin(null);
-        pick({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        pick(p);
       },
       () => setError("Couldn't get your location. Tap the map instead."),
     );
