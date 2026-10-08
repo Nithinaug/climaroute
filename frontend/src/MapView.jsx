@@ -10,21 +10,13 @@ const STYLE_URL =
 const EMPTY = { type: "FeatureCollection", features: [] };
 const COLORS = { safe: "#16a34a", direct: "#dc2626", origin: "#2563eb", destination: "#1f2937" };
 
-const bboxPolygon = ([w, s, e, n]) => ({
-  type: "Feature",
-  geometry: { type: "Polygon", coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]] },
-  properties: {},
-});
-
 const point = (p, role) =>
   p && { type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] }, properties: { role } };
 
 function addLayers(map) {
-  for (const id of ["area", "direct", "safe", "points", "water", "flood", "reports"].map((n) => `cr-${n}`)) {
+  for (const id of ["direct", "safe", "points", "water", "flood", "reports"].map((n) => `cr-${n}`)) {
     map.addSource(id, { type: "geojson", data: EMPTY });
   }
-  map.addLayer({ id: "cr-area", type: "line", source: "cr-area",
-    paint: { "line-color": "#0f766e", "line-width": 2, "line-dasharray": [2, 2] } });
   map.addLayer({ id: "cr-flood", type: "circle", source: "cr-flood",
     paint: { "circle-radius": 14, "circle-color": "#3b82f6", "circle-opacity": 0.35 } });
   map.addLayer({ id: "cr-direct", type: "line", source: "cr-direct",
@@ -74,7 +66,6 @@ export default function MapView({ area, origin, destination, result, mode, repor
   useEffect(() => {
     if (!ready || !area) return;
     const map = mapRef.current;
-    map.getSource("cr-area").setData(bboxPolygon(area.bbox));
     map.getSource("cr-water").setData(area.water_points ?? EMPTY);
     map.getSource("cr-flood").setData(area.flood_spots ?? EMPTY);
     const desktop = window.matchMedia("(min-width: 768px)").matches;
@@ -82,7 +73,12 @@ export default function MapView({ area, origin, destination, result, mode, repor
     const padding = desktop
       ? { top: 8, right: 56, bottom: 8, left: 416 }
       : { top: 8, right: 8, bottom: window.innerHeight * 0.55, left: 8 };
+    // Lock the view to the city: it fills the screen and can't be panned or zoomed away.
+    map.setMaxBounds(null);
+    map.setMinZoom(null);
     map.fitBounds(area.bbox, { padding, duration: 0 });
+    map.setMinZoom(map.getZoom());
+    map.setMaxBounds(map.getBounds());
   }, [ready, area]);
 
   useEffect(() => {
