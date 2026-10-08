@@ -47,9 +47,19 @@ def _graph(sunny_direct: bool = True, flooded_direct: float = 0.0) -> nx.MultiDi
     return g
 
 
-def _route(g, mode="summer", transport="walk", when=AFTERNOON, rain=0.0):
+def _route(g, mode="summer", transport="walk", when=AFTERNOON, rain=0.0, heat=1.0, reports=None):
     a, b = g.nodes["A"], g.nodes["B"]
-    return find_routes(g, (a["lat"], a["lon"]), (b["lat"], b["lon"]), mode, transport, when, rain)
+    return find_routes(
+        g,
+        (a["lat"], a["lon"]),
+        (b["lat"], b["lon"]),
+        mode,
+        transport,
+        when,
+        rain,
+        heat_factor=heat,
+        reports=reports,
+    )
 
 
 def test_summer_prefers_shaded_detour():
@@ -103,3 +113,21 @@ def test_slot_index_uses_local_time():
     utc = datetime(2026, 4, 15, 9, 30, tzinfo=ZoneInfo("UTC"))  # 15:00 IST
     assert slot_index(g, utc) == 36
     assert slot_index(g, datetime(2026, 4, 15, 5, 59, tzinfo=TZ)) is None
+
+
+def test_fresh_flood_report_blocks_street():
+    g = _graph(sunny_direct=False)  # direct is shaded and shortest: normally chosen
+    r = _route(g, reports={"AB": 1.0})
+    assert r["stats"]["safe"]["reported_streets"] == 0
+    assert r["stats"]["direct"]["reported_streets"] == 1
+    assert r["stats"]["safe"]["distance_m"] > r["stats"]["direct"]["distance_m"]
+
+
+def test_faded_report_is_only_a_penalty():
+    g = _graph(sunny_direct=False)
+    assert _route(g, reports={"AB": 0.01})["stats"]["safe"]["reported_streets"] == 1
+
+
+def test_cool_weather_means_no_heat_detour():
+    r = _route(_graph(), heat=0.0)
+    assert r["stats"]["safe"]["distance_m"] == r["stats"]["direct"]["distance_m"]

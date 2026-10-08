@@ -20,7 +20,7 @@ const point = (p, role) =>
   p && { type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] }, properties: { role } };
 
 function addLayers(map) {
-  for (const id of ["area", "direct", "safe", "points", "water", "flood"].map((n) => `cr-${n}`)) {
+  for (const id of ["area", "direct", "safe", "points", "water", "flood", "reports"].map((n) => `cr-${n}`)) {
     map.addSource(id, { type: "geojson", data: EMPTY });
   }
   map.addLayer({ id: "cr-area", type: "line", source: "cr-area",
@@ -36,12 +36,16 @@ function addLayers(map) {
   map.addLayer({ id: "cr-water", type: "circle", source: "cr-water",
     paint: { "circle-radius": 5, "circle-color": "#0ea5e9", "circle-stroke-width": 1.5,
              "circle-stroke-color": "#fff" } });
+  map.addLayer({ id: "cr-reports", type: "circle", source: "cr-reports",
+    paint: { "circle-radius": 9, "circle-color": "#dc2626",
+             "circle-opacity": ["+", 0.35, ["*", 0.65, ["get", "strength"]]],
+             "circle-stroke-width": 2, "circle-stroke-color": "#fff" } });
   map.addLayer({ id: "cr-points", type: "circle", source: "cr-points",
     paint: { "circle-radius": 8, "circle-stroke-width": 2, "circle-stroke-color": "#fff",
              "circle-color": ["match", ["get", "role"], "origin", COLORS.origin, COLORS.destination] } });
 }
 
-export default function MapView({ area, origin, destination, result, mode, onPick }) {
+export default function MapView({ area, origin, destination, result, mode, reports, onPick }) {
   const container = useRef(null);
   const mapRef = useRef(null);
   const pickRef = useRef(onPick);
@@ -95,6 +99,10 @@ export default function MapView({ area, origin, destination, result, mode, onPic
     map.getSource("cr-safe").setData(result?.safe_route ?? EMPTY);
     map.getSource("cr-direct").setData(result?.direct_route ?? EMPTY);
   }, [ready, origin, destination, result]);
+
+  useEffect(() => {
+    if (ready) mapRef.current.getSource("cr-reports").setData(reports ?? EMPTY);
+  }, [ready, reports]);
 
   return (
     <div

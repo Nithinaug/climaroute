@@ -36,6 +36,25 @@ def _nearest(graph: nx.MultiDiGraph, lat: float, lon: float, label: str):
     return nodes[i]
 
 
+def nearest_edge(graph: nx.MultiDiGraph, lat: float, lon: float) -> str:
+    """edge_id of the street closest to a point (for flood reports)."""
+    tree, nodes, kx = _node_index(graph)
+    here = np.array([lon * kx, lat * 110_574])
+    best, best_d = None, float("inf")
+    for i in tree.query(here, k=8)[1]:
+        for _, _, d in graph.edges(nodes[i], data=True):
+            pts = np.array([[x * kx, y * 110_574] for x, y in d["lonlat"]])
+            a, b = pts[:-1], pts[1:]
+            ab = b - a
+            t = np.clip(((here - a) * ab).sum(1) / np.maximum((ab * ab).sum(1), 1e-9), 0, 1)
+            dist = float(np.min(np.linalg.norm(a + t[:, None] * ab - here, axis=1)))
+            if dist < best_d:
+                best, best_d = d["edge_id"], dist
+    if best is None or best_d > config.SNAP_EDGE_MAX_M:
+        raise OutOfAreaError("Tap on a street to report flooding.")
+    return best
+
+
 def slot_index(graph: nx.MultiDiGraph, departure: datetime) -> int | None:
     """Shade slot for the departure's local time, or None at night."""
     departure = departure.astimezone(ZoneInfo(TIMEZONE))
@@ -45,10 +64,12 @@ def slot_index(graph: nx.MultiDiGraph, departure: datetime) -> int | None:
     return slot if 0 <= slot < graph.graph["slot_count"] else None
 
 
-def edge_cost(mode: str, transport: str, slot: int | None, rain_mm: float) -> EdgeCost:
+def edge_cost(
+    mode: str, transport: str, slot: int | None, rain_mm: float, heat: float = 1.0
+) -> EdgeCost:
     """Cost of one edge's attributes; None means the edge is blocked."""
     if mode == "summer":
-        alpha = config.ALPHA[transport] * config.HEAT_FACTOR
+        alpha = config.ALPHA[transport] * heat
 
         def summer(d: dict) -> float:
             shade = 1.0 if slot is None else d["shade"][slot]
@@ -67,6 +88,21 @@ def edge_cost(mode: str, transport: str, slot: int | None, rain_mm: float) -> Ed
         return None if risk > block else d["length"] * (1 + beta * risk)
 
     return monsoon
+
+
+def with_reports(cost: EdgeCost, reports: dict[str, float]) -> EdgeCost:
+    """Flood reports: strength 1 blocks the street, lower strengths fade to a penalty."""
+    if not reports:
+        return cost
+
+    def reported(d: dict) -> float | None:
+        c = cost(d)
+        strength = reports.get(d["edge_id"], 0.0)
+        if c is None or strength >= 1.0:
+            return None
+        return c * (1 + config.REPORT_PENALTY * strength)
+
+    return reported
 
 
 def _path(graph, source, target, cost: EdgeCost) -> tuple[list, list[dict]]:
@@ -102,13 +138,16 @@ def _feature(edges: list[dict], graph, start) -> dict:
     }
 
 
-def _stats(edges: list[dict], mode: str, transport: str, slot, rain_mm: float) -> dict:
+def _stats(
+    edges: list[dict], mode: str, transport: str, slot, rain_mm: float, reports: dict
+) -> dict:
     distance = sum(d["length"] for d in edges)
     stats = {
         "distance_m": round(distance),
         "duration_min": round(distance / config.SPEED_M_PER_S[transport] / 60, 1),
         "shaded_pct": None,
         "risk_streets": None,
+        "reported_streets": len({d["edge_id"] for d in edges if d["edge_id"] in reports}),
     }
     if mode == "summer":
         shaded = sum(d["length"] * (1.0 if slot is None else d["shade"][slot]) for d in edges)
@@ -130,21 +169,27 @@ def find_routes(
     transport: str,
     departure_time: datetime,
     rain_mm_per_hour: float,
+    heat_factor: float = 1.0,
+    reports: dict[str, float] | None = None,
 ) -> dict:
+    """reports: {edge_id: strength 0-1} from active flood reports."""
+    reports = reports or {}
     source = _nearest(graph, *origin, "Start")
     target = _nearest(graph, *destination, "Destination")
     if source == target:
         raise NoRouteError("Start and destination are the same place.")
     slot = slot_index(graph, departure_time)
 
-    safe_cost = edge_cost(mode, transport, slot, rain_mm_per_hour)
+    safe_cost = with_reports(
+        edge_cost(mode, transport, slot, rain_mm_per_hour, heat_factor), reports
+    )
     _, safe_edges = _path(graph, source, target, safe_cost)
     _, direct_edges = _path(graph, source, target, lambda d: d["length"])
     return {
         "safe_route": _feature(safe_edges, graph, source),
         "direct_route": _feature(direct_edges, graph, source),
         "stats": {
-            "safe": _stats(safe_edges, mode, transport, slot, rain_mm_per_hour),
-            "direct": _stats(direct_edges, mode, transport, slot, rain_mm_per_hour),
+            "safe": _stats(safe_edges, mode, transport, slot, rain_mm_per_hour, reports),
+            "direct": _stats(direct_edges, mode, transport, slot, rain_mm_per_hour, reports),
         },
     }

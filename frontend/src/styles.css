@@ -43,6 +43,7 @@ button.link { border: 0; background: none; color: var(--teal); text-decoration: 
 .time input { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
 
 .hint { margin: 0; color: var(--muted); }
+.notice { margin: 0; color: #065f46; background: #ecfdf5; padding: 8px 10px; border-radius: 8px; }
 .error { margin: 0; color: #b91c1c; background: #fef2f2; padding: 8px 10px; border-radius: 8px; }
 .result { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
 .headline { margin: 0; font-weight: 700; font-size: 1.05rem; }

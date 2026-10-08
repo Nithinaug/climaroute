@@ -10,6 +10,8 @@ BBOX = (77.612, 12.925, 77.636, 12.945)  # min_lon, min_lat, max_lon, max_lat
 CENTER = {"lat": 12.935, "lon": 77.624}
 UTM_CRS = "EPSG:32643"
 TIMEZONE = "Asia/Kolkata"
+# Shade slot grid shared by prepare/, the pipeline and routing (graph attrs mirror these).
+SLOT_START, SLOT_MINUTES, SLOT_COUNT = "06:00", 15, 52  # 06:00 .. 18:45
 
 
 def contains(lat: float, lon: float) -> bool:

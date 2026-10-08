@@ -10,6 +10,7 @@ locals {
   # name => handler, memory MB, timeout s
   functions = {
     api        = { handler = "api.main.handler", memory = 2048, timeout = 29 }
+    set-sun    = { handler = "pipeline.handlers.set_sun", memory = 512, timeout = 60 }
     shade-tile = { handler = "pipeline.handlers.shade_tile", memory = 1024, timeout = 240 }
     merge      = { handler = "pipeline.handlers.merge", memory = 2048, timeout = 600 }
   }
@@ -51,6 +52,26 @@ resource "aws_ecr_lifecycle_policy" "app" {
   })
 }
 
+resource "aws_dynamodb_table" "reports" {
+  name         = "${local.name}-flood-reports"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "area"
+  range_key    = "report_id"
+
+  attribute {
+    name = "area"
+    type = "S"
+  }
+  attribute {
+    name = "report_id"
+    type = "S"
+  }
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+}
+
 # ---------- Lambdas ----------
 
 resource "aws_iam_role" "lambda" {
@@ -78,6 +99,7 @@ resource "aws_iam_role_policy" "lambda_data" {
       { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = "${aws_s3_bucket.data.arn}/*" },
       # ListBucket makes a missing key return NoSuchKey instead of AccessDenied.
       { Effect = "Allow", Action = "s3:ListBucket", Resource = aws_s3_bucket.data.arn },
+      { Effect = "Allow", Action = ["dynamodb:PutItem", "dynamodb:Query"], Resource = aws_dynamodb_table.reports.arn },
     ]
   })
 }
@@ -106,6 +128,7 @@ resource "aws_lambda_function" "fn" {
     variables = {
       DATA_BUCKET     = aws_s3_bucket.data.bucket
       ALLOWED_ORIGINS = join(",", var.allowed_origins)
+      REPORTS_TABLE   = aws_dynamodb_table.reports.name
       LOG_LEVEL       = "INFO"
     }
   }
@@ -195,7 +218,7 @@ resource "aws_iam_role_policy" "sfn" {
       {
         Effect = "Allow"
         Action = "lambda:InvokeFunction"
-        Resource = flatten([for k in ["shade-tile", "merge"] : [
+        Resource = flatten([for k in ["set-sun", "shade-tile", "merge"] : [
           aws_lambda_function.fn[k].arn, "${aws_lambda_function.fn[k].arn}:*"
         ]])
       },
@@ -216,7 +239,42 @@ resource "aws_sfn_state_machine" "pipeline" {
   role_arn = aws_iam_role.sfn.arn
   definition = templatefile("${path.module}/pipeline.asl.json", {
     bucket   = aws_s3_bucket.data.bucket
+    sun_fn   = aws_lambda_function.fn["set-sun"].arn
     shade_fn = aws_lambda_function.fn["shade-tile"].arn
     merge_fn = aws_lambda_function.fn["merge"].arn
   })
+}
+
+# ---------- Daily shade run for today's sun (05:00 IST) ----------
+
+resource "aws_iam_role" "scheduler" {
+  name = "${local.name}-daily-shade"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "scheduler" {
+  role = aws_iam_role.scheduler.id
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Action = "states:StartExecution", Resource = aws_sfn_state_machine.pipeline.arn }]
+  })
+}
+
+resource "aws_cloudwatch_event_rule" "daily_shade" {
+  name                = "${local.name}-daily-shade"
+  schedule_expression = "cron(30 23 * * ? *)" # 23:30 UTC = 05:00 IST
+}
+
+resource "aws_cloudwatch_event_target" "daily_shade" {
+  rule     = aws_cloudwatch_event_rule.daily_shade.name
+  arn      = aws_sfn_state_machine.pipeline.arn
+  role_arn = aws_iam_role.scheduler.arn
+  input    = jsonencode({})
 }

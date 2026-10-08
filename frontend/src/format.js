@@ -11,13 +11,29 @@ export function comparison(stats, mode) {
     }
     return `${time} · ${safe.shaded_pct}% shaded vs ${direct.shaded_pct}%`;
   }
-  const avoided = direct.risk_streets - safe.risk_streets;
+  const avoided =
+    direct.risk_streets + direct.reported_streets - safe.risk_streets - safe.reported_streets;
   if (avoided <= 0) {
     return direct.risk_streets === 0
       ? "No flood-risk streets on the way right now"
       : `${time} · no safer route available`;
   }
   return `${time} · avoids ${avoided} flood-risk street${avoided === 1 ? "" : "s"}`;
+}
+
+export function conditionsText(c, mode) {
+  if (!c) return "";
+  const parts = [];
+  if (mode === "summer") {
+    if (c.temperature_c != null) parts.push(`${Math.round(c.temperature_c)}°C`);
+    if (c.cloud_cover_pct != null) parts.push(`${Math.round(c.cloud_cover_pct)}% cloud`);
+    if (c.heat_factor != null) parts.push(`heat weight ${c.heat_factor}`);
+    if (c.shade_date) parts.push(`shade for ${c.shade_date}`);
+  } else {
+    parts.push(`Rain ${c.rain_mm_per_hour} mm/h`);
+  }
+  if (c.active_reports) parts.push(`${c.active_reports} flood report${c.active_reports === 1 ? "" : "s"}`);
+  return parts.join(" · ");
 }
 
 export function todayAt(hhmm) {

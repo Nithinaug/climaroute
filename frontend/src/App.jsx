@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { getArea, getRoute } from "./api.js";
-import { comparison, todayAt } from "./format.js";
+import { getArea, getReports, getRoute, postReport } from "./api.js";
+import { comparison, conditionsText, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
 import { PRESETS } from "./presets.js";
 
@@ -41,16 +41,34 @@ export default function App() {
   const [transport, setTransport] = useState("walk");
   const [time, setTime] = useState(""); // "" = leave now
   const [rainScenario, setRainScenario] = useState("live");
+  const [heatScenario, setHeatScenario] = useState("live");
+  const [reports, setReports] = useState(null);
+  const [reporting, setReporting] = useState(false);
+  const [notice, setNotice] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     getArea().then(setArea).catch((e) => setError(e.message));
+    getReports().then(setReports).catch(() => {});
+  }, []);
+
+  const report = useCallback(async (p) => {
+    setReporting(false);
+    try {
+      await postReport(p);
+      setReports(await getReports());
+      setNotice("Thanks! Routes will avoid this street for the next 3 hours.");
+    } catch (e) {
+      setError(e.message);
+    }
   }, []);
 
   const pick = useCallback(
     (p) => {
+      setNotice(null);
+      if (reporting) return report(p);
       if (area && !inArea(area, p)) {
         setError(`That point is outside the covered area (${area.name}). Try a preset trip.`);
         return;
@@ -64,7 +82,7 @@ export default function App() {
         setDestination(p);
       }
     },
-    [area, origin, destination],
+    [area, origin, destination, reporting, report],
   );
 
   useEffect(() => {
@@ -78,6 +96,7 @@ export default function App() {
       mode,
       transport,
       rain_scenario: rainScenario,
+      heat_scenario: heatScenario,
       ...(time && { departure_time: todayAt(time) }),
     })
       .then((r) => !cancelled && setResult(r))
@@ -90,7 +109,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [origin, destination, mode, transport, time, rainScenario]);
+  }, [origin, destination, mode, transport, time, rainScenario, heatScenario, reports]);
 
   const useMyLocation = () => {
     if (!navigator.geolocation) return setError("Location isn't available in this browser.");
@@ -110,11 +129,14 @@ export default function App() {
     setTransport(p.transport);
     setTime(p.time ?? "");
     setRainScenario(p.rainScenario ?? "live");
+    setHeatScenario(p.heatScenario ?? "live");
     setOrigin(p.origin);
     setDestination(p.destination);
   };
 
-  const hint = !origin
+  const hint = reporting
+    ? "Tap the flooded street on the map."
+    : !origin
     ? "Tap the map to set your start, or pick a demo trip."
     : !destination
       ? "Now tap your destination."
@@ -128,6 +150,7 @@ export default function App() {
         destination={destination}
         result={result}
         mode={mode}
+        reports={reports}
         onPick={pick}
       />
       <aside className="panel" aria-label="Route options">
@@ -146,6 +169,9 @@ export default function App() {
             <Toggle label="Rain" value={rainScenario} onChange={setRainScenario}
               options={[["live", "Live"], ["heavy", "Heavy rain demo"]]} />
           ) : (
+            <>
+            <Toggle label="Weather" value={heatScenario} onChange={setHeatScenario}
+              options={[["live", "Live"], ["heatwave", "Heatwave demo"]]} />
             <label className="time">
               Leaving at
               <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
@@ -153,11 +179,15 @@ export default function App() {
                 <button type="button" className="link" onClick={() => setTime("")}>now</button>
               )}
             </label>
+            </>
           )}
         </div>
 
         <div className="row actions">
           <button type="button" onClick={useMyLocation}>📍 Use my location</button>
+          <button type="button" aria-pressed={reporting} onClick={() => setReporting((r) => !r)}>
+            🚩 Report flooding
+          </button>
           {(origin || destination) && (
             <button type="button" className="link" onClick={() => { setOrigin(null); setDestination(null); setResult(null); }}>
               Clear
@@ -168,15 +198,14 @@ export default function App() {
         <div aria-live="polite">
           {hint && <p className="hint">{hint}</p>}
           {loading && <p className="hint">Finding the safest route…</p>}
+          {notice && <p className="notice">{notice}</p>}
           {error && <p className="error" role="alert">{error}</p>}
           {result && !loading && (
             <section className="result">
               <p className="headline">{comparison(result.stats, mode)}</p>
               <Stats title="Safe route" s={result.stats.safe} mode={mode} swatch="safe" />
               <Stats title="Direct route" s={result.stats.direct} mode={mode} swatch="direct" />
-              {mode === "monsoon" && (
-                <p className="fine">Rain: {result.conditions.rain_mm_per_hour} mm/hour</p>
-              )}
+              <p className="fine">{conditionsText(result.conditions, mode)}</p>
             </section>
           )}
         </div>

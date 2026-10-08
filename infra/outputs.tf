@@ -10,6 +10,10 @@ output "ecr_repository_url" {
   value = aws_ecr_repository.app.repository_url
 }
 
+output "reports_table" {
+  value = aws_dynamodb_table.reports.name
+}
+
 output "pipeline_arn" {
   value = aws_sfn_state_machine.pipeline.arn
 }

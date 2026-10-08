@@ -1,7 +1,14 @@
 {
-  "Comment": "ClimaRoute shade pipeline: shade every tile in parallel, then merge into the graphs",
-  "StartAt": "ReadIndex",
+  "Comment": "ClimaRoute shade pipeline: today's sun, shade every tile in parallel, merge",
+  "StartAt": "SetSun",
   "States": {
+    "SetSun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": { "FunctionName": "${sun_fn}", "Payload.$": "$" },
+      "ResultPath": null,
+      "Next": "ReadIndex"
+    },
     "ReadIndex": {
       "Type": "Task",
       "Resource": "arn:aws:states:::aws-sdk:s3:getObject",

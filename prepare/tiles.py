@@ -2,14 +2,14 @@
 
 import math
 from collections import defaultdict
+from datetime import date
 
 import geopandas as gpd
 import networkx as nx
-import pandas as pd
-import pvlib
 from shapely import STRtree, box
 
 from prepare.graphs import SHADE_DATE, SLOT_COUNT, SLOT_MINUTES, SLOT_START
+from shade import sun
 from shared import area
 
 TILE_SIZE_M = 500
@@ -17,13 +17,15 @@ LOW_SUN_DEG = 10.0  # below this every edge counts as shaded; caps shadow length
 
 
 def slots() -> list[dict]:
-    start = pd.Timestamp(f"{SHADE_DATE} {SLOT_START}", tz=area.TIMEZONE)
-    times = pd.date_range(start, periods=SLOT_COUNT, freq=f"{SLOT_MINUTES}min")
-    sun = pvlib.solarposition.get_solarposition(times, area.CENTER["lat"], area.CENTER["lon"])
-    return [
-        {"slot": i, "elevation_deg": round(float(e), 2), "azimuth_deg": round(float(a), 2)}
-        for i, (e, a) in enumerate(zip(sun["apparent_elevation"], sun["azimuth"], strict=True))
-    ]
+    return sun.slots(
+        date.fromisoformat(SHADE_DATE),
+        area.CENTER["lat"],
+        area.CENTER["lon"],
+        area.TIMEZONE,
+        SLOT_START,
+        SLOT_MINUTES,
+        SLOT_COUNT,
+    )
 
 
 def tile_inputs(graphs: list[nx.MultiDiGraph], shade_casters: gpd.GeoDataFrame) -> dict[str, dict]:

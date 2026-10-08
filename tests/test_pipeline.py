@@ -33,3 +33,15 @@ def test_merge_rejects_missing_values():
     g = make_dummy_tiles.build_graph("walk")
     with pytest.raises(ValueError):
         merge_graph(g, shade_by_edge={}, terrain_by_edge={})
+
+
+def test_set_sun_rewrites_slots_for_the_date(local_data):
+    make_dummy_tiles.main()
+    from pipeline.handlers import set_sun
+
+    assert set_sun({"date": "2026-12-21"}) == {"date": "2026-12-21"}
+    index = json.loads(read_bytes("tiles/index.json"))
+    assert index["shade_date"] == "2026-12-21"
+    assert len(index["slots"]) == 52
+    noon = max(s["elevation_deg"] for s in index["slots"])
+    assert 50 < noon < 56  # December sun is low over Bengaluru (pvlib: 53.4 deg)

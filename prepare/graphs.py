@@ -6,8 +6,8 @@ from shapely.geometry import LineString
 
 from shared import area
 
-SHADE_DATE = "2026-04-15"  # peak Bengaluru summer
-SLOT_START, SLOT_MINUTES, SLOT_COUNT = "06:00", 15, 52  # 06:00 .. 18:45
+SHADE_DATE = "2026-04-15"  # initial date; the daily pipeline run rewrites it to today
+SLOT_START, SLOT_MINUTES, SLOT_COUNT = area.SLOT_START, area.SLOT_MINUTES, area.SLOT_COUNT
 
 
 def _name(value) -> str | None:

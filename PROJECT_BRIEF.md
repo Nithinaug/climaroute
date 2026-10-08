@@ -328,8 +328,14 @@ PWA install.
 - **Frontend:** Amplify Hosting connected to GitHub `main`.
 - **Maps:** Amazon Location Service API key allowing only map tiles and place
   search, restricted to the Amplify domain and localhost.
-- **Warm-up:** EventBridge schedule pings `GET /health` every 5 minutes so
-  judges rarely hit a cold start.
+- **Warm-up:** EventBridge schedule invokes the API Lambda every 5 minutes
+  (preloading graphs) so judges rarely hit a cold start.
+- **Daily shade:** EventBridge runs the Step Functions pipeline at 05:00 IST.
+  `SetSun` rewrites `tiles/index.json` for today's sun (built-in solar position,
+  no pvlib), then tiles are shaded in parallel and merged (~45 s for Koramangala).
+  The API re-reads graphs every 10 minutes. Manual run for any date:
+  `aws stepfunctions start-execution --state-machine-arn <arn> --input '{"date":"2026-04-15"}'`.
+- **Flood reports:** DynamoDB on-demand table with TTL.
 - **Observability:** CloudWatch logs (structured, one line per request with
   mode, transport, latency, error code); one alarm on API 5xx.
 - **Cost guard:** $10 monthly budget with alerts; API throttling; no
@@ -399,12 +405,11 @@ Validation (by eye, before trusting results):
 - **Any area on demand:** compute tiles the first time someone routes there,
   cache in S3 (the tile pipeline already supports this).
 - **More cities** via batch runs of the same pipeline.
-- **Seasonal shade:** precompute several dates per year and use the nearest.
-- **Real heat factor:** use temperature and humidity (heat index) instead of
-  a constant.
+- **Heat index:** add humidity to the live temperature/cloud heat factor.
+- **Weather per location** (several Open-Meteo grid points) for larger areas.
 - **Tree canopy** from satellite imagery instead of mapped trees.
-- **Better flood data:** rainfall nowcasts, drainage data, crowd-reported
-  waterlogging, municipal flood reports.
+- **Better flood data:** rainfall nowcasts, drainage data, municipal flood
+  reports; report moderation (confirmations, abuse limits).
 - **More transport:** cars, public transport, cycling, wheelchair-accessible
   routes.
 - **Live traffic** and signal delays for two-wheelers.
@@ -580,7 +585,8 @@ def rain_factor(rain_mm_per_hour: float) -> float  # 0.0-1.0, non-decreasing, 0 
 
 `flood_risk = terrain_risk * rain_factor(rain)` per edge, at request time.
 Heavy-rain demo scenario = **50 mm/hour**. Live rain = Open-Meteo, cached 30 min
-(api/ owns fetching).
+(api/weather.py): the larger of the current rate and each of the past 6 hours'
+rain decayed with a 1.5 h drainage half-life, so risk lingers after a storm.
 
 ### 5. Routing function (routing/)
 
@@ -593,8 +599,16 @@ def find_routes(
     transport: Literal["walk", "two_wheeler"],
     departure_time: datetime,             # timezone-aware
     rain_mm_per_hour: float,              # ignored in summer
+    heat_factor: float = 1.0,             # routing.heat_factor(temp_c, cloud_pct); summer only
+    reports: dict[str, float] | None = None,  # {edge_id: strength 0-1} from flood reports
 ) -> dict
+
+def nearest_edge(graph, lat, lon) -> str   # street for a flood report; OutOfAreaError if > 60 m
+def heat_factor(temperature_c, cloud_cover_pct) -> float  # 0 at <=26 C, 1 at 34 C, max 1.5; x(1-0.8*cloud)
 ```
+
+Flood reports: strength 1.0 blocks the edge; lower strengths multiply its cost by
+`1 + REPORT_PENALTY * strength` (applied on top of either mode).
 
 **Costs** (all penalties non-negative so the A* straight-line heuristic stays admissible):
 
@@ -602,7 +616,8 @@ def find_routes(
 - monsoon: `length * (1 + BETA * flood_risk)`; edges with `flood_risk > BLOCK_THRESHOLD` are removed
 - `slot = floor((departure - slot_start) / slot_minutes)`. Outside 0..slot_count-1 (night):
   shade is treated as 1.0 (no heat penalty).
-- `heat_factor` = 1.0 for now. `ALPHA`, `BETA`, `BLOCK_THRESHOLD` live in `routing/config.py`
+- `heat_factor` comes from the forecast temperature and cloud cover at the departure
+  hour (or the heatwave scenario: 38 °C, clear = 1.5). `ALPHA`, `BETA`, `BLOCK_THRESHOLD` live in `routing/config.py`
   as dicts keyed by transport (currently `BLOCK_THRESHOLD = {"walk": 0.85, "two_wheeler": 0.7}`);
   tuned so safe routes stay within ~30% of the shortest distance.
 - `duration_min` uses the transport's speed (section 0).
@@ -625,6 +640,7 @@ def find_routes(
 | `duration_min` | float         | 1 decimal |
 | `shaded_pct`   | int or None   | summer: length-weighted % shaded at the departure slot; monsoon: `None` |
 | `risk_streets` | int or None   | monsoon: count of distinct `edge_id` with `flood_risk >= 0.5`; summer: `None` |
+| `reported_streets` | int       | distinct `edge_id`s on the route with an active flood report |
 
 **Raises** (defined in `routing/errors.py`):
 
@@ -650,7 +666,8 @@ Request:
   "mode": "summer",
   "transport": "walk",
   "departure_time": "2026-10-08T14:30:00+05:30",
-  "rain_scenario": "live"
+  "rain_scenario": "live",
+  "heat_scenario": "live"
 }
 ```
 
@@ -658,6 +675,7 @@ Request:
 - `transport`: optional, `"walk"` (default) | `"two_wheeler"`
 - `departure_time`: optional, ISO 8601 with offset; default = now.
 - `rain_scenario`: optional, `"live"` (default) | `"heavy"`; ignored in summer.
+- `heat_scenario`: optional, `"live"` (default) | `"heatwave"`; ignored in monsoon.
 
 Response `200`:
 
@@ -669,7 +687,9 @@ Response `200`:
     "safe":   {"distance_m": 1420, "duration_min": 18.2, "shaded_pct": 65, "risk_streets": null},
     "direct": {"distance_m": 1180, "duration_min": 15.1, "shaded_pct": 20, "risk_streets": null}
   },
-  "conditions": {"mode": "summer", "transport": "walk", "rain_mm_per_hour": 0.0, "slot_time": "14:30"}
+  "conditions": {"mode": "summer", "transport": "walk", "rain_mm_per_hour": 0.0, "slot_time": "14:30",
+                 "temperature_c": 31.0, "cloud_cover_pct": 20.0, "heat_factor": 0.53,
+                 "shade_date": "2026-10-08", "active_reports": 0}
 }
 ```
 
@@ -688,6 +708,14 @@ What the frontend needs to draw the covered area and summer extras.
 ```
 
 `bbox` is `[min_lon, min_lat, max_lon, max_lat]`.
+
+#### `GET /reports`, `POST /reports`
+
+Crowd flood reports (DynamoDB `climaroute-flood-reports`, TTL on `expires_at`).
+`POST {"lat": .., "lon": ..}` snaps to the nearest street (≤ 60 m) and returns
+`201` with a GeoJSON Point Feature. `GET` returns active reports as a
+FeatureCollection with `properties.age_min` and `properties.strength`. A report
+blocks its street for 1 h, then fades to nothing at 3 h.
 
 #### `GET /health`
 
@@ -708,7 +736,8 @@ Every non-200 response uses one shape:
 | 422  | `NO_ROUTE`     | `NoRouteError` |
 | 429  | `THROTTLED`    | API Gateway throttling |
 | 500  | `INTERNAL`     | anything else (details only in logs) |
-| 503  | `RAIN_UNAVAILABLE` | Open-Meteo down with no cached value; frontend suggests the heavy-rain scenario |
+| 422  | `NOT_ON_STREET` | flood report more than 60 m from any street |
+| 503  | `RAIN_UNAVAILABLE` | Open-Meteo down with no cached value; frontend suggests the heavy-rain scenario (summer falls back to heat factor 1.0 instead) |
 
 `message` is safe to show to users as-is.
 

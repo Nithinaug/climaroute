@@ -18,6 +18,15 @@ async function request(path, options) {
 
 export const getArea = () => request("/area");
 
+export const getReports = () => request("/reports");
+
+export const postReport = (point) =>
+  request("/reports", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(point),
+  });
+
 export const getRoute = (params) =>
   request("/route", {
     method: "POST",

@@ -1,12 +1,13 @@
 // One-tap demo trips inside the covered area.
 export const PRESETS = [
   {
-    label: "Afternoon walk, 5th → 4th Block",
+    label: "Heatwave afternoon walk, 5th → 4th Block",
     origin: { lat: 12.93, lon: 77.617 },
     destination: { lat: 12.942, lon: 77.632 },
     mode: "summer",
     transport: "walk",
     time: "16:00",
+    heatScenario: "heatwave",
   },
   {
     label: "Heavy rain walk past Sony World",
