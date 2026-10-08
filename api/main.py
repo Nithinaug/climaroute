@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import pickle
 import time
 from datetime import datetime
 from functools import lru_cache
@@ -20,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from api import reports, weather
 from routing import NoRouteError, OutOfAreaError, find_routes, heat_factor, nearest_edge
+from routing.net import Net
 from shared import area
 from shared.storage import read_bytes
 
@@ -49,7 +49,7 @@ def graph(transport: str):
 
 @lru_cache(maxsize=4)
 def _load_graph(transport: str, _bucket: int):
-    return pickle.loads(read_bytes(f"graph/{transport}.pkl"))
+    return Net.from_bytes(read_bytes(f"graph/{transport}.npz"))
 
 
 class ApiError(Exception):
@@ -164,7 +164,7 @@ def route(req: RouteRequest):
         "temperature_c": temperature,
         "cloud_cover_pct": cloud,
         "heat_factor": heat if req.mode == "summer" else None,
-        "shade_date": graph(req.transport).graph.get("shade_date"),
+        "shade_date": graph(req.transport).meta.get("shade_date"),
         "active_reports": len(active_reports),
     }
     log.info(

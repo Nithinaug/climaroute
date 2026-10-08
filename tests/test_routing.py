@@ -6,7 +6,8 @@ import pytest
 from shapely.geometry import LineString
 
 from routing import NoRouteError, OutOfAreaError, find_routes
-from routing.routes import shade_at, slot_index
+from routing.net import from_graph
+from routing.routes import slot_index, street_shade
 
 TZ = ZoneInfo("Asia/Kolkata")
 AFTERNOON = datetime(2026, 4, 15, 15, 0, tzinfo=TZ)  # slot 36
@@ -50,7 +51,7 @@ def _graph(sunny_direct: bool = True, flooded_direct: float = 0.0) -> nx.MultiDi
 def _route(g, mode="summer", transport="walk", when=AFTERNOON, rain=0.0, heat=1.0, reports=None):
     a, b = g.nodes["A"], g.nodes["B"]
     return find_routes(
-        g,
+        from_graph(g),
         (a["lat"], a["lon"]),
         (b["lat"], b["lon"]),
         mode,
@@ -105,14 +106,16 @@ def test_no_route_when_everything_floods():
 
 def test_out_of_area():
     with pytest.raises(OutOfAreaError):
-        find_routes(_graph(), (13.1, 77.6), (12.93, 77.62), "summer", "walk", AFTERNOON, 0.0)
+        find_routes(
+            from_graph(_graph()), (13.1, 77.6), (12.93, 77.62), "summer", "walk", AFTERNOON, 0.0
+        )
 
 
 def test_slot_index_uses_local_time():
-    g = _graph()
+    meta = _graph().graph
     utc = datetime(2026, 4, 15, 9, 30, tzinfo=ZoneInfo("UTC"))  # 15:00 IST
-    assert slot_index(g, utc) == 36
-    assert slot_index(g, datetime(2026, 4, 15, 5, 59, tzinfo=TZ)) is None
+    assert slot_index(meta, utc) == 36
+    assert slot_index(meta, datetime(2026, 4, 15, 5, 59, tzinfo=TZ)) is None
 
 
 def test_fresh_flood_report_blocks_street():
@@ -134,8 +137,10 @@ def test_cool_weather_means_no_heat_detour():
 
 
 def test_shade_blends_between_slots():
-    d = {"shade": [0.0, 1.0, 1.0]}
     g = _graph()
+    for *_, d in g.edges(data=True):
+        d["shade"] = [0.0, 1.0] + [1.0] * 50
+    net = from_graph(g)
     when = datetime(2026, 4, 15, 6, 7, 30, tzinfo=TZ)  # halfway between 06:00 and 06:15
-    assert shade_at(d, slot_index(g, when)) == pytest.approx(0.5)
-    assert shade_at(d, None) == 1.0
+    assert street_shade(net, slot_index(net.meta, when))[0] == pytest.approx(0.5)
+    assert street_shade(net, None)[0] == 1.0

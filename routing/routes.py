@@ -1,146 +1,115 @@
-"""Safe vs direct route search (brief section 5)."""
+"""Safe vs direct route search (brief section 5) on a compact Net.
 
-import math
-from collections.abc import Callable
+Costs for every edge are computed at once with numpy for each request, then scipy's
+Dijkstra (C) finds the path. Penalties are non-negative multipliers of length.
+"""
+
 from datetime import datetime
-from functools import cache
 from zoneinfo import ZoneInfo
 
-import networkx as nx
 import numpy as np
-from scipy.spatial import cKDTree
+from scipy.sparse.csgraph import dijkstra
 
 from monsoon.rain import rain_factor
 from routing import config
 from routing.errors import NoRouteError, OutOfAreaError
+from routing.net import M_PER_DEG_LAT, Net
 from shared.area import TIMEZONE
 
-EdgeCost = Callable[[dict], float | None]
+BLOCKED = 1e9  # cost of an unusable edge; a path costing this much counts as no route
 
 
-@cache
-def _node_index(graph: nx.MultiDiGraph) -> tuple[cKDTree, list, float]:
-    """KD-tree over nodes in local metres (equirectangular around the area)."""
-    nodes = list(graph.nodes)
-    lat0 = float(np.mean([graph.nodes[n]["lat"] for n in nodes]))
-    kx = 111_320 * math.cos(math.radians(lat0))
-    pts = [(graph.nodes[n]["lon"] * kx, graph.nodes[n]["lat"] * 110_574) for n in nodes]
-    return cKDTree(pts), nodes, kx
-
-
-def _nearest(graph: nx.MultiDiGraph, lat: float, lon: float, label: str):
-    tree, nodes, kx = _node_index(graph)
-    dist, i = tree.query((lon * kx, lat * 110_574))
+def _nearest_node(net: Net, lat: float, lon: float, label: str) -> int:
+    dist, i = net.kdtree.query((lon * net.kx, lat * M_PER_DEG_LAT))
     if dist > config.SNAP_MAX_M:
-        raise OutOfAreaError(f"{label} is outside the covered area ({graph.graph['area_name']}).")
-    return nodes[i]
+        raise OutOfAreaError(f"{label} is outside the covered area ({net.meta['area_name']}).")
+    return int(i)
 
 
-def nearest_edge(graph: nx.MultiDiGraph, lat: float, lon: float) -> str:
+def nearest_edge(net: Net, lat: float, lon: float) -> str:
     """edge_id of the street closest to a point (for flood reports)."""
-    tree, nodes, kx = _node_index(graph)
-    here = np.array([lon * kx, lat * 110_574])
+    here = np.array([lon * net.kx, lat * M_PER_DEG_LAT])
+    _, near = net.kdtree.query(here, k=min(8, len(net.node_lat)))
     best, best_d = None, float("inf")
-    for i in tree.query(here, k=8)[1]:
-        for _, _, d in graph.edges(nodes[i], data=True):
-            pts = np.array([[x * kx, y * 110_574] for x, y in d["lonlat"]])
+    for u in np.atleast_1d(near):
+        for pos in range(net.indptr[u], net.indptr[u + 1]):
+            s = int(net.street[net._order[pos]])
+            pts = net.street_coords(s) * [net.kx, M_PER_DEG_LAT]
             a, b = pts[:-1], pts[1:]
             ab = b - a
             t = np.clip(((here - a) * ab).sum(1) / np.maximum((ab * ab).sum(1), 1e-9), 0, 1)
-            dist = float(np.min(np.linalg.norm(a + t[:, None] * ab - here, axis=1)))
-            if dist < best_d:
-                best, best_d = d["edge_id"], dist
+            d = float(np.min(np.linalg.norm(a + t[:, None] * ab - here, axis=1)))
+            if d < best_d:
+                best, best_d = s, d
     if best is None or best_d > config.SNAP_EDGE_MAX_M:
         raise OutOfAreaError("Tap on a street to report flooding.")
-    return best
+    return str(net.street_id[best])
 
 
-def slot_index(graph: nx.MultiDiGraph, departure: datetime) -> float | None:
+def slot_index(meta: dict, departure: datetime) -> float | None:
     """Fractional shade slot for the departure's local time (16:07 -> between the 16:00
     and 16:15 slots), or None at night."""
     departure = departure.astimezone(ZoneInfo(TIMEZONE))
-    h, m = map(int, graph.graph["slot_start"].split(":"))
+    h, m = map(int, meta["slot_start"].split(":"))
     minutes = departure.hour * 60 + departure.minute + departure.second / 60 - (h * 60 + m)
-    slot = minutes / graph.graph["slot_minutes"]
-    return slot if 0 <= slot < graph.graph["slot_count"] else None
+    slot = minutes / meta["slot_minutes"]
+    return slot if 0 <= slot < meta["slot_count"] else None
 
 
-def shade_at(d: dict, slot: float | None) -> float:
-    """Edge shade blended between the two nearest slots; night counts as shaded."""
+def street_shade(net: Net, slot: float | None) -> np.ndarray:
+    """Shade 0-1 per street, blended between the two nearest slots; night counts as shaded."""
     if slot is None:
-        return 1.0
+        return np.ones(len(net.street_id), np.float32)
     i = int(slot)
-    j = min(i + 1, len(d["shade"]) - 1)
+    j = min(i + 1, net.shade.shape[1] - 1)
     frac = slot - i
-    return d["shade"][i] * (1 - frac) + d["shade"][j] * frac
+    return (net.shade[:, i] * (1 - frac) + net.shade[:, j] * frac) / 255.0
 
 
-def edge_cost(
-    mode: str, transport: str, slot: float | None, rain_mm: float, heat: float = 1.0
-) -> EdgeCost:
-    """Cost of one edge's attributes; None means the edge is blocked."""
+def edge_weights(
+    net: Net,
+    mode: str,
+    transport: str,
+    slot: float | None,
+    rain_mm: float,
+    heat: float,
+    reports: dict[str, float],
+) -> np.ndarray:
+    """Safe-route cost per directed edge; BLOCKED where unusable."""
     if mode == "summer":
-        alpha = config.ALPHA[transport] * heat
-
-        def summer(d: dict) -> float:
-            return d["length"] * (1 + alpha * (1 - shade_at(d, slot)))
-
-        return summer
-
-    beta, block, rf = (
-        config.BETA[transport],
-        config.BLOCK_THRESHOLD[transport],
-        rain_factor(rain_mm),
-    )
-
-    def monsoon(d: dict) -> float | None:
-        risk = d["terrain_risk"] * rf
-        return None if risk > block else d["length"] * (1 + beta * risk)
-
-    return monsoon
+        sun = 1 - street_shade(net, slot)[net.street]
+        w = net.length * (1 + config.ALPHA[transport] * heat * sun)
+    else:
+        risk = net.terrain[net.street] * rain_factor(rain_mm)
+        w = net.length * (1 + config.BETA[transport] * risk)
+        w = np.where(risk > config.BLOCK_THRESHOLD[transport], BLOCKED, w)
+    if reports:
+        strength = np.zeros(len(net.street_id), np.float32)
+        for edge_id, s in reports.items():
+            if (k := net.street_index.get(edge_id)) is not None:
+                strength[k] = s
+        es = strength[net.street]
+        w = np.where(es >= 1.0, BLOCKED, w * (1 + config.REPORT_PENALTY * es))
+    return w.astype(np.float64)
 
 
-def with_reports(cost: EdgeCost, reports: dict[str, float]) -> EdgeCost:
-    """Flood reports: strength 1 blocks the street, lower strengths fade to a penalty."""
-    if not reports:
-        return cost
-
-    def reported(d: dict) -> float | None:
-        c = cost(d)
-        strength = reports.get(d["edge_id"], 0.0)
-        if c is None or strength >= 1.0:
-            return None
-        return c * (1 + config.REPORT_PENALTY * strength)
-
-    return reported
+def _path(net: Net, source: int, target: int, weights: np.ndarray) -> list[int]:
+    """Edge indices of the cheapest path."""
+    dist, pred = dijkstra(net.matrix(weights), indices=source, return_predecessors=True)
+    if not np.isfinite(dist[target]) or dist[target] >= BLOCKED:
+        raise NoRouteError("No safe route found between these points right now.")
+    nodes = [target]
+    while nodes[-1] != source:
+        nodes.append(int(pred[nodes[-1]]))
+    nodes.reverse()
+    return [net.edge_between(u, v) for u, v in zip(nodes, nodes[1:], strict=False)]
 
 
-def _path(graph, source, target, cost: EdgeCost) -> tuple[list, list[dict]]:
-    """A* path plus the chosen edge attributes between consecutive nodes."""
-
-    def weight(_u, _v, keyed: dict) -> float | None:
-        costs = [c for c in (cost(d) for d in keyed.values()) if c is not None]
-        return min(costs) if costs else None
-
-    def heuristic(a, b) -> float:
-        na, nb = graph.nodes[a], graph.nodes[b]
-        return math.hypot(na["x"] - nb["x"], na["y"] - nb["y"])
-
-    try:
-        nodes = nx.astar_path(graph, source, target, heuristic=heuristic, weight=weight)
-    except nx.NetworkXNoPath:
-        raise NoRouteError("No safe route found between these points right now.") from None
-    edges = []
-    for u, v in zip(nodes, nodes[1:], strict=False):
-        usable = [d for d in graph[u][v].values() if cost(d) is not None]
-        edges.append(min(usable, key=cost))
-    return nodes, edges
-
-
-def _feature(edges: list[dict], graph, start) -> dict:
-    coords = [[graph.nodes[start]["lon"], graph.nodes[start]["lat"]]]
-    for d in edges:
-        coords.extend(d["lonlat"][1:])
+def _feature(net: Net, edges: list[int]) -> dict:
+    coords: list[list[float]] = []
+    for e in edges:
+        pts = net.edge_coords(e).round(6).tolist()
+        coords.extend(pts if not coords else pts[1:])
     return {
         "type": "Feature",
         "geometry": {"type": "LineString", "coordinates": coords},
@@ -149,30 +118,30 @@ def _feature(edges: list[dict], graph, start) -> dict:
 
 
 def _stats(
-    edges: list[dict], mode: str, transport: str, slot, rain_mm: float, reports: dict
+    net: Net, edges: list[int], mode: str, transport: str, slot, rain_mm: float, reports: dict
 ) -> dict:
-    distance = sum(d["length"] for d in edges)
+    e = np.array(edges, dtype=np.int64)
+    streets = net.street[e]
+    lengths = net.length[e].astype(np.float64)
+    distance = float(lengths.sum())
     stats = {
         "distance_m": round(distance),
         "duration_min": round(distance / config.SPEED_M_PER_S[transport] / 60, 1),
         "shaded_pct": None,
         "risk_streets": None,
-        "reported_streets": len({d["edge_id"] for d in edges if d["edge_id"] in reports}),
+        "reported_streets": len({str(net.street_id[s]) for s in streets} & set(reports)),
     }
     if mode == "summer":
-        shaded = sum(d["length"] * shade_at(d, slot) for d in edges)
+        shaded = float((lengths * street_shade(net, slot)[streets]).sum())
         stats["shaded_pct"] = round(100 * shaded / distance) if distance else 0
     else:
-        rf = rain_factor(rain_mm)
-        risky = {
-            d["edge_id"] for d in edges if d["terrain_risk"] * rf >= config.RISK_STREET_THRESHOLD
-        }
-        stats["risk_streets"] = len(risky)
+        risky = net.terrain[streets] * rain_factor(rain_mm) >= config.RISK_STREET_THRESHOLD
+        stats["risk_streets"] = len(set(streets[risky].tolist()))
     return stats
 
 
 def find_routes(
-    graph: nx.MultiDiGraph,
+    net: Net,
     origin: tuple[float, float],
     destination: tuple[float, float],
     mode: str,
@@ -184,22 +153,24 @@ def find_routes(
 ) -> dict:
     """reports: {edge_id: strength 0-1} from active flood reports."""
     reports = reports or {}
-    source = _nearest(graph, *origin, "Start")
-    target = _nearest(graph, *destination, "Destination")
+    source = _nearest_node(net, *origin, "Start")
+    target = _nearest_node(net, *destination, "Destination")
     if source == target:
         raise NoRouteError("Start and destination are the same place.")
-    slot = slot_index(graph, departure_time)
+    slot = slot_index(net.meta, departure_time)
 
-    safe_cost = with_reports(
-        edge_cost(mode, transport, slot, rain_mm_per_hour, heat_factor), reports
+    safe = _path(
+        net,
+        source,
+        target,
+        edge_weights(net, mode, transport, slot, rain_mm_per_hour, heat_factor, reports),
     )
-    _, safe_edges = _path(graph, source, target, safe_cost)
-    _, direct_edges = _path(graph, source, target, lambda d: d["length"])
+    direct = _path(net, source, target, net.length.astype(np.float64))
     return {
-        "safe_route": _feature(safe_edges, graph, source),
-        "direct_route": _feature(direct_edges, graph, source),
+        "safe_route": _feature(net, safe),
+        "direct_route": _feature(net, direct),
         "stats": {
-            "safe": _stats(safe_edges, mode, transport, slot, rain_mm_per_hour, reports),
-            "direct": _stats(direct_edges, mode, transport, slot, rain_mm_per_hour, reports),
+            "safe": _stats(net, safe, mode, transport, slot, rain_mm_per_hour, reports),
+            "direct": _stats(net, direct, mode, transport, slot, rain_mm_per_hour, reports),
         },
     }

@@ -6,12 +6,12 @@ Used by tests as a tiny stand-in for prepare/ output.
 
 import json
 import math
-import pickle
 from collections import defaultdict
 
 import networkx as nx
 from shapely.geometry import LineString, box
 
+from routing.net import from_graph
 from shared.storage import write_bytes
 
 SW = (12.928, 77.615)  # lat, lon of the grid's south-west corner
@@ -122,7 +122,7 @@ def main() -> None:
     for tile_id, tile_input in tile_inputs.items():
         write_bytes(f"tiles/{tile_id}/input.json", json.dumps(tile_input).encode())
     for g in graphs:
-        write_bytes(f"graph/{g.graph['transport']}_base.pkl", pickle.dumps(g, protocol=5))
+        write_bytes(f"graph/{g.graph['transport']}_base.npz", from_graph(g).to_bytes())
     write_bytes("terrain/terrain_risk.json", json.dumps(terrain(graphs[0])).encode())
     print(f"{len(tile_inputs)} tiles, edges: {[g.number_of_edges() for g in graphs]}")
 

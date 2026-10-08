@@ -1,9 +1,9 @@
 import json
-import pickle
 
 import pytest
 
 from pipeline.handlers import merge, shade_tile
+from routing.net import Net, from_graph
 from shade import merge_graph
 from shared.storage import read_bytes
 from tests import dummy_area as make_dummy_tiles
@@ -16,11 +16,10 @@ def test_full_pipeline_locally(local_data):
     result = merge()
 
     for transport in ("walk", "two_wheeler"):
-        g = pickle.loads(read_bytes(f"graph/{transport}.pkl"))
-        assert g.number_of_edges() == result["edges"][transport]
-        _, _, d = next(iter(g.edges(data=True)))
-        assert len(d["shade"]) == g.graph["slot_count"]
-        assert 0.0 <= d["terrain_risk"] <= 1.0
+        net = Net.from_bytes(read_bytes(f"graph/{transport}.npz"))
+        assert len(net.src) == result["edges"][transport]
+        assert net.shade.shape == (len(net.street_id), net.meta["slot_count"])
+        assert ((net.terrain >= 0) & (net.terrain <= 1)).all()
 
 
 def test_two_wheeler_has_one_way_streets():
@@ -32,7 +31,7 @@ def test_two_wheeler_has_one_way_streets():
 def test_merge_rejects_missing_values():
     g = make_dummy_tiles.build_graph("walk")
     with pytest.raises(ValueError):
-        merge_graph(g, shade_by_edge={}, terrain_by_edge={})
+        merge_graph(from_graph(g), shade_by_edge={}, terrain_by_edge={})
 
 
 def test_set_sun_rewrites_slots_for_the_date(local_data):

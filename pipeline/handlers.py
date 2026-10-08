@@ -2,10 +2,10 @@
 
 import json
 import logging
-import pickle
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from routing.net import Net
 from shade import compute_tile_shade, merge_graph, sun
 from shared import area
 from shared.storage import read_bytes, write_bytes
@@ -61,10 +61,9 @@ def merge(event=None, context=None) -> dict:
 
     edges = {}
     for transport in TRANSPORTS:
-        base = pickle.loads(read_bytes(f"graph/{transport}_base.pkl"))
-        graph = merge_graph(base, shade, terrain)
-        graph.graph["shade_date"] = shade_date
-        write_bytes(f"graph/{transport}.pkl", pickle.dumps(graph, protocol=5))
-        edges[transport] = graph.number_of_edges()
+        net = merge_graph(Net.from_bytes(read_bytes(f"graph/{transport}_base.npz")), shade, terrain)
+        net.meta["shade_date"] = shade_date
+        write_bytes(f"graph/{transport}.npz", net.to_bytes())
+        edges[transport] = len(net.src)
     log.info(json.dumps({"event": "merge", "edges": edges}))
     return {"edges": edges}

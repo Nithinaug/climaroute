@@ -1,12 +1,11 @@
 """Build everything the shade pipeline needs: python -m prepare.build
 
-Writes tiles/, graph/*_base.pkl, terrain/terrain_risk.json and data/water_points.geojson
+Writes tiles/, graph/*_base.npz, terrain/terrain_risk.json and data/water_points.geojson
 through shared.storage (local ./data, or S3 when DATA_BUCKET is set).
 """
 
 import json
 import logging
-import pickle
 
 import geopandas as gpd
 import pandas as pd
@@ -15,6 +14,7 @@ from monsoon import terrain
 from prepare import heights, osm
 from prepare.graphs import to_schema
 from prepare.tiles import slots, tile_inputs
+from routing.net import from_graph
 from shared import area
 from shared.storage import write_bytes
 
@@ -54,7 +54,7 @@ def main() -> None:
     for tile_id, tile in tiles.items():
         write_bytes(f"tiles/{tile_id}/input.json", json.dumps(tile).encode())
     for g in graphs:
-        write_bytes(f"graph/{g.graph['transport']}_base.pkl", pickle.dumps(g, protocol=5))
+        write_bytes(f"graph/{g.graph['transport']}_base.npz", from_graph(g).to_bytes())
 
     risk = terrain.write(graphs)
     write_bytes(

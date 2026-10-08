@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from api import main, reports, weather
 from api.main import app, handler
+from routing.net import from_graph
 from shade import merge_graph
 from tests import dummy_area
 
@@ -31,7 +32,7 @@ def fakes(monkeypatch):
     def load(transport):
         g = dummy_area.build_graph(transport)
         shade = {d["edge_id"]: [0.5] * 52 for *_, d in g.edges(data=True)}
-        return merge_graph(g, shade, dummy_area.terrain(dummy_area.build_graph("walk")))
+        return merge_graph(from_graph(g), shade, dummy_area.terrain(dummy_area.build_graph("walk")))
 
     monkeypatch.setattr(main, "graph", load)
     monkeypatch.setattr(weather, "_cache", {"value": weather.parse(SAMPLE), "at": 1e18})

@@ -1,8 +1,6 @@
-# Runtime (Lambda image). Pinned: the graph pickles must load with the same
-# networkx/shapely versions that built them.
+# Runtime (Lambda image). Pinned for reproducible builds.
 fastapi==0.142.4
 mangum==0.22.0
-networkx==3.7
 numpy==2.5.3
 scipy==1.18.1
 shapely==2.2.0

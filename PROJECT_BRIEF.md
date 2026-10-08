@@ -61,10 +61,10 @@ geometry work when a user searches. The precompute has three stages:
    one Lambda per tile, all in parallel -> tiles/<id>/shade.json       -> S3
 
 3. MERGE (Lambda)
-   base graphs + all shade.json + terrain risk -> walk.pkl, two_wheeler.pkl -> S3
+   base graphs + all shade.json + terrain risk -> walk.npz, two_wheeler.npz -> S3
 
 ONLINE (per request)
-user -> frontend -> POST /route -> Lambda (loads both graphs once) -> A* -> 2 routes + stats
+user -> frontend -> POST /route -> Lambda (loads both graphs once) -> Dijkstra -> 2 routes + stats
                                      └─ Open-Meteo weather (cached 10 min)
 ```
 
@@ -114,8 +114,10 @@ Sanity-check a few known buildings before trusting it.
 - At request time: `flood_risk = terrain_risk × rain_factor(mm/hour)`.
 
 **Routing (request time):**
-- A* with straight-line distance heuristic. This is admissible because every
-  edge cost ≥ its length, so **penalties must never be negative**.
+- Dijkstra (`scipy.sparse.csgraph.dijkstra`) on a compact numpy graph
+  (`routing.Net`); per-request edge costs are computed for all edges at once
+  with numpy. **Penalties must never be negative** (Dijkstra needs costs ≥ 0,
+  and every cost stays ≥ its length).
 - Summer: `cost = length × (1 + ALPHA × heat_factor × (1 − shade[slot]))`
 - Monsoon: `cost = length × (1 + BETA × flood_risk)`; edges above a
   threshold are blocked.
@@ -149,7 +151,8 @@ Key decisions:
   AWS.
 - The tile-shade Lambda only needs shapely + numpy: sun positions are computed
   in the prepare step and passed in, so pvlib/pandas stay on the laptop.
-- The Lambda image stays small: networkx, shapely, numpy, scipy only. **No
+- The Lambda image stays small: shapely, numpy, scipy only (networkx is used
+  only offline and in tests). **No
   GDAL, rasterio, osmnx, geopandas or pandas** in `routing/` or `api/`. These
   are fine in offline scripts (`shade/`, `monsoon/`).
 - Files are read and written only through `shared.storage.read_bytes` /
@@ -225,7 +228,7 @@ Only non-code prep unless the rules say pre-built code is allowed.
 
 **Day 2 — real data end to end**
 - Real `compute_tile_shade` and terrain risk; pipeline (or local runner)
-  produces real `walk.pkl` / `two_wheeler.pkl`.
+  produces real `walk.npz` / `two_wheeler.npz`.
 - Real `find_routes` replaces the mock in the API.
 - Validation (see Testing and validation).
 - **Checkpoint (evening):** one full real trip in each mode and transport on
@@ -243,11 +246,12 @@ Only non-code prep unless the rules say pre-built code is allowed.
 
 - Python 3.12 virtual env per person. Three pinned requirement files at the
   repo root:
-  - `requirements.txt` — runtime (Lambda): fastapi, networkx, shapely,
-    numpy, scipy, httpx
+  - `requirements.txt` — runtime (Lambda): fastapi, mangum, shapely,
+    numpy, scipy
+  - `requirements-dev.txt` — tests: `-r requirements.txt` plus httpx,
+    networkx, pytest, ruff
   - `requirements-prepare.txt` — laptop only: `-r requirements.txt` plus
     osmnx, geopandas, rasterio, pvlib, pysheds
-  - `requirements-dev.txt` — pytest, ruff
 - Frontend: `cd frontend && npm install && npm run dev`.
 - Local API: `uvicorn api.main:app --reload` with `DATA_BUCKET` unset (reads
   `./data/`).
@@ -424,7 +428,7 @@ to change, update it here in the same PR as the code. Items marked **TBD**
 are decided at kickoff.
 
 ```
-prepare -> tiles -> shade (per tile) -> merge (+ monsoon terrain) -> walk.pkl + two_wheeler.pkl -> routing/ -> api/ -> frontend/
+prepare -> tiles -> shade (per tile) -> merge (+ monsoon terrain) -> walk.npz + two_wheeler.npz -> routing/ -> api/ -> frontend/
 ```
 
 ### 0. Shared conventions
@@ -434,7 +438,7 @@ prepare -> tiles -> shade (per tile) -> merge (+ monsoon terrain) -> walk.pkl + 
 | Coordinates    | API and GeoJSON: WGS84 `[lon, lat]` (GeoJSON order). Graph internals: local UTM metres. |
 | Units          | metres, minutes, mm/hour. Fractions are `0.0`-`1.0`, never percent (except `shaded_pct` in API stats). |
 | Timezone       | `Asia/Kolkata`. All slot maths in local time.               |
-| Python         | 3.12. Pinned versions in root `requirements.txt` (networkx, shapely, numpy, scipy). The graph builder and the Lambda must use the same versions or the pickle may not load. |
+| Python         | 3.12. Pinned versions in root `requirements.txt` (shapely, numpy, scipy). |
 | Transport      | `"walk"` \| `"two_wheeler"` everywhere (API, function args, file names). |
 | Speeds         | walk 1.3 m/s, two_wheeler 5.0 m/s (~18 km/h city average). `duration_min = distance_m / speed / 60`. |
 | Area           | Koramangala, Bengaluru (~2 × 2 km). Graph covers it plus a ~300 m buffer. |
@@ -447,8 +451,8 @@ All file access goes through one function. No `boto3`, no `s3://` paths, no
 ```python
 from shared.storage import read_bytes, write_bytes
 
-data = read_bytes("graph/walk.pkl")        # -> bytes
-write_bytes("graph/walk.pkl", payload)     # bytes -> None
+data = read_bytes("graph/walk.npz")        # -> bytes
+write_bytes("graph/walk.npz", payload)     # bytes -> None
 ```
 
 - Env var `DATA_BUCKET` unset: reads/writes `./data/<key>` (local dev).
@@ -464,58 +468,60 @@ write_bytes("graph/walk.pkl", payload)     # bytes -> None
 | `tiles/index.json`             | prepare          | pipeline       | see section 3 |
 | `tiles/<tile_id>/input.json`   | prepare          | shade          | see section 3 |
 | `tiles/<tile_id>/shade.json`   | shade            | merge          | see section 3 |
-| `graph/walk_base.pkl`, `graph/two_wheeler_base.pkl` | prepare | merge | section 2 schema without `shade` / `terrain_risk` |
+| `graph/walk_base.npz`, `graph/two_wheeler_base.npz` | prepare | merge | section 2 `Net` with empty `shade` / `terrain` |
 | `terrain/terrain_risk.json`    | monsoon          | merge          | `{edge_id: float}` for every edge in both graphs |
-| `graph/walk.pkl`, `graph/two_wheeler.pkl` | merge | routing | see section 2 |
+| `graph/walk.npz`, `graph/two_wheeler.npz` | merge | api, routing | see section 2 |
 | `data/water_points.geojson`    | prepare          | api            | FeatureCollection of Points, WGS84 |
 
 Hand-marked known flood spots live in the repo at
 `monsoon/known_flood_spots.geojson` (versioned, served by `GET /area`).
 
-### 2. Graph files (`graph/walk.pkl`, `graph/two_wheeler.pkl`)
+### 2. Graph files (`graph/walk.npz`, `graph/two_wheeler.npz`)
 
-Each is `pickle.dumps(G, protocol=5)` of a `networkx.MultiDiGraph`, same
-schema for both:
+Each is a `routing.Net`, saved with `Net.to_bytes()` (numpy `savez_compressed`,
+no pickle) and loaded with `Net.from_bytes()`. Compact numpy arrays instead of
+networkx so a whole city fits in the Lambda (Koramangala walk: 170 KB, loads in
+3 ms, routes in ~1 ms).
 
-- `walk.pkl`: OSMnx `network_type="walk"`. Every street has an edge in both
-  directions.
-- `two_wheeler.pkl`: OSMnx `network_type="drive"`. One-way streets have an
-  edge in one direction only.
+- `walk`: OSMnx `network_type="walk"`. Every street has an edge in both directions.
+- `two_wheeler`: OSMnx `network_type="drive"`. One-way streets have an edge in
+  one direction only.
 
-**Graph attributes** (`G.graph`):
+prepare/ builds a networkx `MultiDiGraph` (node attrs `x`, `y`, `lat`, `lon`;
+edge attrs `edge_id`, `length`, `geometry`, `lonlat`, `name`) and converts it
+with `Net.from_graph(g)`. Parallel edges between the same two nodes keep only
+the shortest.
+
+**`meta`** (dict, stored as JSON):
 
 | Key            | Type  | Example                     |
 |----------------|-------|-----------------------------|
 | `crs`          | str   | `"EPSG:32643"`              |
 | `area_name`    | str   | `"Koramangala, Bengaluru"`  |
 | `transport`    | str   | `"walk"` or `"two_wheeler"` |
-| `shade_date`   | str   | `"2026-04-15"` (peak summer; date the shade was computed for) |
+| `shade_date`   | str   | `"2026-10-08"` (date the shade was computed for; set by the pipeline daily) |
 | `slot_start`   | str   | `"06:00"` (local time of slot 0) |
 | `slot_minutes` | int   | `15`                        |
 | `slot_count`   | int   | `52` (06:00 to 18:45)       |
 
-**Node attributes:**
+**Arrays.** A *street* is one OSM segment (one `edge_id`), shared by both
+travel directions. An *edge* is one direction of travel.
 
-| Attr       | Type  | Meaning           |
-|------------|-------|-------------------|
-| `x`, `y`   | float | UTM metres        |
-| `lat`, `lon` | float | WGS84           |
+| Field          | Shape / dtype          | Meaning |
+|----------------|------------------------|---------|
+| `node_lat`, `node_lon` | `[N]` float64  | WGS84 |
+| `src`, `dst`   | `[E]` int32            | node indices of each directed edge |
+| `length`       | `[E]` float32          | metres, `> 0` |
+| `street`       | `[E]` int32            | index into the street arrays |
+| `reverse`      | `[E]` bool             | edge runs against the street's coordinate order |
+| `street_id`    | `[S]` str              | stable `edge_id`, e.g. `"osm-123456-789-0"` |
+| `street_name`  | `[S]` str              | `""` if unnamed |
+| `coords`, `coord_start` | `[C,2]` float64, `[S+1]` int64 | street `s` is `coords[coord_start[s]:coord_start[s+1]]` as `[lon, lat]` |
+| `shade`        | `[S, slot_count]` uint8 | fraction shaded × 255 per slot (empty in `*_base.npz`) |
+| `terrain`      | `[S]` float32          | terrain risk `0.0`-`1.0`; known waterlogging spots = `1.0` (empty in `*_base.npz`) |
 
-**Edge attributes** (key `(u, v, k)`):
-
-| Attr           | Type             | Meaning |
-|----------------|------------------|---------|
-| `edge_id`      | str              | Stable id, same for both directions of a street, e.g. `"osm-123456-0"` |
-| `length`       | float            | metres, `> 0` |
-| `geometry`     | shapely LineString | UTM, runs from `u` to `v` |
-| `lonlat`       | list[[lon, lat]] | WGS84 coordinates of `geometry`, `u` to `v` (route drawing without pyproj in Lambda) |
-| `name`         | str or None      | Street name, for popups/stats |
-| `shade`        | list[float]      | length == `slot_count`; fraction of edge length shaded in that slot, `0.0`-`1.0` |
-| `terrain_risk` | float            | `0.0`-`1.0`; known waterlogging spots = `1.0` |
-
-`shade` comes from the tile pipeline, `terrain_risk` from monsoon/; the
-merge step (section 3) attaches both. Missing values are build errors, not
-defaults.
+`shade` comes from the tile pipeline, `terrain` from monsoon/; the merge step
+(section 3) fills both. Missing values are build errors, not defaults.
 
 ### 3. Shade pipeline (tiles)
 
@@ -562,11 +568,11 @@ def compute_tile_shade(tile_input: dict, slots: list[dict]) -> dict[str, list[fl
 
 # shade/ (merge)
 def merge_graph(
-    base: nx.MultiDiGraph,
+    base: Net,
     shade_by_edge: dict[str, list[float]],
     terrain_by_edge: dict[str, float],
-) -> nx.MultiDiGraph
-    # raises ValueError if any edge is missing shade or terrain_risk
+) -> Net
+    # raises ValueError if any street is missing shade or terrain_risk
 ```
 
 **Runners:**
@@ -592,7 +598,7 @@ rain decayed with a 1.5 h drainage half-life, so risk lingers after a storm.
 
 ```python
 def find_routes(
-    graph: nx.MultiDiGraph,               # the graph matching `transport`
+    net: Net,                             # the graph matching `transport`
     origin: tuple[float, float],          # (lat, lon)
     destination: tuple[float, float],     # (lat, lon)
     mode: Literal["summer", "monsoon"],
@@ -603,17 +609,17 @@ def find_routes(
     reports: dict[str, float] | None = None,  # {edge_id: strength 0-1} from flood reports
 ) -> dict
 
-def nearest_edge(graph, lat, lon) -> str   # street for a flood report; OutOfAreaError if > 60 m
+def nearest_edge(net, lat, lon) -> str   # street for a flood report; OutOfAreaError if > 60 m
 def heat_factor(temperature_c, cloud_cover_pct) -> float  # 0 at <=26 C, 1 at 34 C, max 1.5; x(1-0.8*cloud)
 ```
 
 Flood reports: strength 1.0 blocks the edge; lower strengths multiply its cost by
 `1 + REPORT_PENALTY * strength` (applied on top of either mode).
 
-**Costs** (all penalties non-negative so the A* straight-line heuristic stays admissible):
+**Costs** (all penalties non-negative; Dijkstra needs costs ≥ 0):
 
 - summer: `length * (1 + ALPHA * heat_factor * (1 - shade[slot]))`
-- monsoon: `length * (1 + BETA * flood_risk)`; edges with `flood_risk > BLOCK_THRESHOLD` are removed
+- monsoon: `length * (1 + BETA * flood_risk)`; edges with `flood_risk > BLOCK_THRESHOLD` are blocked (cost `1e9`; a route that needs one raises `NoRouteError`)
 - `slot = (departure - slot_start) / slot_minutes` as a fraction; shade is blended
   linearly between the two nearest slots (16:07 = 53% of 16:00 + 47% of 16:15), so it
   changes minute by minute. Outside the slot window (night): shade is 1.0 (no heat penalty).
@@ -763,7 +769,7 @@ Everything below is built and deployed; no stand-ins remain.
 uv pip install -r requirements-prepare.txt
 python -m prepare.build
 # 2. Upload to S3 and run the Step Functions shade pipeline (or: python -m pipeline.run_local)
-aws s3 sync data/ s3://climaroute-data-723949188124/ --exclude "graph/walk.pkl" --exclude "graph/two_wheeler.pkl"
+aws s3 sync data/ s3://climaroute-data-723949188124/ --exclude "graph/walk.npz" --exclude "graph/two_wheeler.npz"
 aws stepfunctions start-execution --state-machine-arn <pipeline_arn output>
 # 3. Deploy API/pipeline code
 TAG=$(infra/push_image.sh) && terraform -chdir=infra apply -var image_tag=$TAG
