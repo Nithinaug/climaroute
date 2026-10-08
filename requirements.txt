@@ -1,4 +1,3 @@
-# Runtime (Lambda image). Pinned for reproducible builds.
 fastapi==0.142.4
 mangum==0.22.0
 numpy==2.5.3

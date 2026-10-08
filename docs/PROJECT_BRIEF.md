@@ -1,6 +1,6 @@
 # ClimaRoute: Project Brief
 
-Context for anyone (human or AI assistant) working on this project. The
+Context for anyone working on this project. The
 **Interfaces** section at the end is the source of truth for data formats,
 function signatures and the API.
 
@@ -165,7 +165,7 @@ Key decisions:
   names, types, units and shapes exactly.
 - **Keep the brief current.** Any change to an interface, dependency, file,
   env var or decision goes into this brief in the same PR as the code, so
-  everyone (and every AI assistant) works from the latest version.
+  everyone works from the latest version.
 - **Stay in your own folder.** Don't edit other people's folders,
   `shared/`, `api/` or `infra/`.
 - **No AWS code:** no `boto3`, no `s3://` paths.

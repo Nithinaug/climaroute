@@ -1,5 +1,4 @@
-# One-time: the bucket that holds the main stack's Terraform state.
-# terraform init && terraform apply   (local state for this tiny stack is fine)
+# Terraform state bucket for the main stack (apply once).
 
 terraform {
   required_version = ">= 1.10"

@@ -1,7 +1,9 @@
 """Building heights: OSM tags -> Google Open Buildings 2.5D (2023) -> default by type."""
 
 import io
+import json
 import logging
+import urllib.request
 
 import geopandas as gpd
 import numpy as np
@@ -10,16 +12,16 @@ from rasterio.features import rasterize
 from rasterio.merge import merge
 from scipy import ndimage
 
+from shared import area
 from shared.storage import read_bytes, write_bytes
 
 log = logging.getLogger(__name__)
 
-# Tiles covering Koramangala (UTM 43N), found via the dataset's manifests.
-OPEN_BUILDINGS_TILES = [
-    "https://storage.googleapis.com/open-buildings-temporal-data/v1/geotiffs/"
-    "3bae4_2023_06_30/tile_ydbp6MFK7Vw.tif",
-    "https://storage.googleapis.com/open-buildings-temporal-data/v1/geotiffs/"
-    "3bae4_2023_06_30/tile_hXqKtZuLh78.tif",
+# 2023 manifests for UTM 43N (Bengaluru); each lists every tile and its extent.
+MANIFESTS = [
+    "https://storage.googleapis.com/open-buildings-temporal-data/v1/manifests/"
+    f"{cell}_EPSG_32643_2023_06_30.json"
+    for cell in ("39", "3b")
 ]
 HEIGHT_BAND = 2  # bands: fractional_count, height, presence
 RESOLUTION_M = 2.0  # source is 0.5 m pixels with ~4 m effective resolution
@@ -65,12 +67,28 @@ def _osm_height(row) -> float | None:
     return levels * LEVEL_HEIGHT_M if levels else None
 
 
+def tile_urls(bounds: tuple[float, float, float, float], manifests: list[dict]) -> list[str]:
+    """Open Buildings tiles overlapping UTM bounds (min_x, min_y, max_x, max_y)."""
+    urls = []
+    for m in manifests:
+        prefix = m["uriPrefix"].replace("gs://", "https://storage.googleapis.com/")
+        for source in (s for t in m["tilesets"] for s in t["sources"]):
+            t, size = source["affineTransform"], source["dimensions"]
+            x0, y1 = t["translateX"], t["translateY"]
+            x1, y0 = x0 + size["width"] * t["scaleX"], y1 + size["height"] * t["scaleY"]
+            if x0 < bounds[2] and bounds[0] < x1 and y0 < bounds[3] and bounds[1] < y1:
+                urls += [prefix + uri for uri in source["uris"]]
+    return urls
+
+
 def _height_raster(bounds: tuple[float, float, float, float]) -> tuple[np.ndarray, object]:
-    """Open Buildings height for the UTM bounds, cached at raw/building_heights.tif."""
+    """Open Buildings height for the UTM bounds, cached per area."""
+    key = area.raw_key("building_heights.tif")
     try:
-        data = read_bytes("raw/building_heights.tif")
+        data = read_bytes(key)
     except FileNotFoundError:
-        sources = [rasterio.open(f"/vsicurl/{url}") for url in OPEN_BUILDINGS_TILES]
+        manifests = [json.load(urllib.request.urlopen(url)) for url in MANIFESTS]
+        sources = [rasterio.open(f"/vsicurl/{url}") for url in tile_urls(bounds, manifests)]
         array, transform = merge(sources, bounds=bounds, res=RESOLUTION_M, indexes=[HEIGHT_BAND])
         base = {
             k: v
@@ -88,7 +106,7 @@ def _height_raster(bounds: tuple[float, float, float, float]) -> tuple[np.ndarra
             with mem.open(**profile) as dst:
                 dst.write(array)
             data = mem.read()
-        write_bytes("raw/building_heights.tif", data)
+        write_bytes(key, data)
     with rasterio.open(io.BytesIO(data)) as src:
         return src.read(1), src.transform
 

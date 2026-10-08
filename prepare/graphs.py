@@ -1,4 +1,4 @@
-"""Turn osmnx street graphs into the brief's graph schema (section 2), minus shade/terrain."""
+"""Turn osmnx street graphs into street graphs (without shade and terrain yet)."""
 
 import networkx as nx
 import osmnx as ox

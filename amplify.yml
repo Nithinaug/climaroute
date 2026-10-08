@@ -1,5 +1,3 @@
-# Amplify Hosting build for the frontend (monorepo: app lives in frontend/).
-# Set VITE_API_URL (and optionally VITE_MAP_STYLE_URL) in Amplify environment variables.
 version: 1
 applications:
   - appRoot: frontend

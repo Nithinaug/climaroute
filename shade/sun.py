@@ -35,7 +35,7 @@ def sun_position(when: datetime, lat: float, lon: float) -> tuple[float, float]:
 def slots(
     day: date, lat: float, lon: float, tz: str, start: str, minutes: int, count: int
 ) -> list[dict]:
-    """Sun position for each shade slot of a day (brief section 3, tiles/index.json)."""
+    """Sun position for each shade slot of a day."""
     h, m = map(int, start.split(":"))
     first = datetime(day.year, day.month, day.day, h, m, tzinfo=ZoneInfo(tz))
     out = []

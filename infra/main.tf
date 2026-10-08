@@ -6,17 +6,16 @@ locals {
   image_uri = "${aws_ecr_repository.app.repository_url}:${var.image_tag}"
   sfn_name  = "${local.name}-shade-pipeline"
   sfn_arn   = "arn:aws:states:${var.region}:${local.account}:stateMachine:${local.sfn_name}"
+  area_env  = { AREA_NAME = var.area_name, AREA_BBOX = var.area_bbox }
 
   # name => handler, memory MB, timeout s
   functions = {
-    api        = { handler = "api.main.handler", memory = 2048, timeout = 29 }
+    api        = { handler = "api.main.handler", memory = 3008, timeout = 29 }
     set-sun    = { handler = "pipeline.handlers.set_sun", memory = 512, timeout = 60 }
     shade-tile = { handler = "pipeline.handlers.shade_tile", memory = 1024, timeout = 240 }
-    merge      = { handler = "pipeline.handlers.merge", memory = 2048, timeout = 600 }
+    merge      = { handler = "pipeline.handlers.merge", memory = 3008, timeout = 600 }
   }
 }
-
-# ---------- Storage ----------
 
 resource "aws_s3_bucket" "data" {
   bucket = "${local.name}-data-${local.account}"
@@ -72,8 +71,6 @@ resource "aws_dynamodb_table" "reports" {
   }
 }
 
-# ---------- Lambdas ----------
-
 resource "aws_iam_role" "lambda" {
   name = "${local.name}-lambda"
   assume_role_policy = jsonencode({
@@ -125,18 +122,16 @@ resource "aws_lambda_function" "fn" {
   }
 
   environment {
-    variables = {
+    variables = merge(local.area_env, {
       DATA_BUCKET     = aws_s3_bucket.data.bucket
       ALLOWED_ORIGINS = join(",", var.allowed_origins)
       REPORTS_TABLE   = aws_dynamodb_table.reports.name
       LOG_LEVEL       = "INFO"
-    }
+    })
   }
 
   depends_on = [aws_cloudwatch_log_group.fn]
 }
-
-# ---------- HTTP API ----------
 
 resource "aws_apigatewayv2_api" "http" {
   name          = "${local.name}-api"
@@ -175,8 +170,6 @@ resource "aws_lambda_permission" "apigw" {
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
 
-# ---------- Keep-warm ping ----------
-
 resource "aws_cloudwatch_event_rule" "warmup" {
   name                = "${local.name}-warmup"
   schedule_expression = "rate(5 minutes)"
@@ -195,8 +188,6 @@ resource "aws_lambda_permission" "warmup" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.warmup.arn
 }
-
-# ---------- Shade pipeline (Step Functions) ----------
 
 resource "aws_iam_role" "sfn" {
   name = "${local.name}-sfn"
@@ -244,8 +235,6 @@ resource "aws_sfn_state_machine" "pipeline" {
     merge_fn = aws_lambda_function.fn["merge"].arn
   })
 }
-
-# ---------- Daily shade run for today's sun (05:00 IST) ----------
 
 resource "aws_iam_role" "scheduler" {
   name = "${local.name}-daily-shade"

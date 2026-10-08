@@ -1,17 +1,23 @@
 """The covered area, shared by prepare/ (what to download) and api/ (what to accept)."""
 
 import json
+import os
 from functools import cache
 
 from shared.storage import read_bytes
 
-NAME = "Koramangala, Bengaluru"
-BBOX = (77.612, 12.925, 77.636, 12.945)  # min_lon, min_lat, max_lon, max_lat
-CENTER = {"lat": 12.935, "lon": 77.624}
+NAME = os.environ.get("AREA_NAME", "Koramangala, Bengaluru")
+_BBOX = os.environ.get("AREA_BBOX", "77.612,12.925,77.636,12.945")
+BBOX = tuple(float(v) for v in _BBOX.split(","))  # min_lon, min_lat, max_lon, max_lat
+CENTER = {"lat": (BBOX[1] + BBOX[3]) / 2, "lon": (BBOX[0] + BBOX[2]) / 2}
 UTM_CRS = "EPSG:32643"
 TIMEZONE = "Asia/Kolkata"
-# Shade slot grid shared by prepare/, the pipeline and routing (graph attrs mirror these).
 SLOT_START, SLOT_MINUTES, SLOT_COUNT = "06:00", 15, 52  # 06:00 .. 18:45
+
+
+def raw_key(name: str) -> str:
+    """Cache key for downloaded source data, per area so a new bbox never reuses old data."""
+    return f"raw/{_BBOX}/{name}"
 
 
 def contains(lat: float, lon: float) -> bool:

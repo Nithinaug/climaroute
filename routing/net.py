@@ -34,8 +34,6 @@ class Net:
     shade: np.ndarray = field(default_factory=lambda: np.zeros((0, 0), np.uint8))  # [S, slots]
     terrain: np.ndarray = field(default_factory=lambda: np.zeros(0, np.float32))  # [S]
 
-    # ---------- derived, built once per load ----------
-
     @cached_property
     def _order(self) -> np.ndarray:
         return np.lexsort((self.dst, self.src))  # CSR order: by source node, then target
@@ -77,8 +75,6 @@ class Net:
         c = self.street_coords(int(self.street[e]))
         return c[::-1] if self.reverse[e] else c
 
-    # ---------- serialisation ----------
-
     ARRAYS = (
         "node_lat",
         "node_lon",
@@ -109,7 +105,7 @@ class Net:
 
 
 def from_graph(g) -> "Net":
-    """networkx MultiDiGraph in the brief's schema -> Net. Parallel edges between the same
+    """osmnx-style MultiDiGraph -> Net. Parallel edges between the same
     two nodes keep only the shortest (rare after osmnx simplification)."""
     nodes = list(g.nodes)
     node_ix = {n: i for i, n in enumerate(nodes)}

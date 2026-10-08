@@ -17,3 +17,8 @@ output "reports_table" {
 output "pipeline_arn" {
   value = aws_sfn_state_machine.pipeline.arn
 }
+
+output "prepare_network" {
+  description = "awsvpcConfiguration for aws ecs run-task (used by run_prepare.sh)"
+  value       = "subnets=[${join(",", data.aws_subnets.default.ids)}],securityGroups=[${data.aws_security_group.default.id}],assignPublicIp=ENABLED"
+}

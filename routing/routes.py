@@ -1,4 +1,4 @@
-"""Safe vs direct route search (brief section 5) on a compact Net.
+"""Safe vs direct route search on a compact Net.
 
 Costs for every edge are computed at once with numpy for each request, then scipy's
 Dijkstra (C) finds the path. Penalties are non-negative multipliers of length.

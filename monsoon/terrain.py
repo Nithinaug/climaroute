@@ -2,6 +2,7 @@
 
 import io
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -9,17 +10,15 @@ import geopandas as gpd
 import networkx as nx
 import numpy as np
 import rasterio
-from rasterio.windows import from_bounds
+from rasterio.merge import merge
 from scipy import ndimage
 from shapely.geometry import LineString
 
 from shared import area
 from shared.storage import read_bytes, write_bytes
 
-DEM_URL = (
-    "https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N12_00_E077_00_DEM/"
-    "Copernicus_DSM_COG_10_N12_00_E077_00_DEM.tif"
-)
+DEM_URL = "https://copernicus-dem-30m.s3.amazonaws.com/{name}/{name}.tif"
+DEM_NAME = "Copernicus_DSM_COG_10_N{lat:02d}_00_E{lon:03d}_00_DEM"  # 1x1 degree tiles, N/E only
 DEM_BUFFER_DEG = 0.02  # ~2 km so drainage from outside the area is counted
 LOCAL_WINDOW_PX = 11  # ~330 m neighbourhood for "lower than surroundings"
 FULL_DEPTH_M, FULL_LOW_M = 2.0, 3.0
@@ -34,31 +33,37 @@ def _untiled(profile: dict) -> dict:
 
 
 def _dem_bytes() -> bytes:
-    """Copernicus GLO-30 clipped around the area, cached at raw/dem.tif."""
+    """Copernicus GLO-30 clipped around the area (merged across 1-degree tiles), cached per area."""
+    key = area.raw_key("dem.tif")
     try:
-        return read_bytes("raw/dem.tif")
+        return read_bytes(key)
     except FileNotFoundError:
         min_lon, min_lat, max_lon, max_lat = area.BBOX
         b = DEM_BUFFER_DEG
-        with rasterio.open(f"/vsicurl/{DEM_URL}") as src:
-            window = from_bounds(min_lon - b, min_lat - b, max_lon + b, max_lat + b, src.transform)
-            data = src.read(1, window=window)
-            profile = _untiled(src.profile) | {
-                "height": data.shape[0],
-                "width": data.shape[1],
-                "transform": src.window_transform(window),
-            }
+        bounds = (min_lon - b, min_lat - b, max_lon + b, max_lat + b)
+        names = [
+            DEM_NAME.format(lat=lat, lon=lon)
+            for lat in range(math.floor(bounds[1]), math.floor(bounds[3]) + 1)
+            for lon in range(math.floor(bounds[0]), math.floor(bounds[2]) + 1)
+        ]
+        sources = [rasterio.open(f"/vsicurl/{DEM_URL.format(name=n)}") for n in names]
+        data, transform = merge(sources, bounds=bounds)
+        profile = _untiled(sources[0].profile) | {
+            "height": data.shape[1],
+            "width": data.shape[2],
+            "transform": transform,
+        }
         with rasterio.MemoryFile() as mem:
             with mem.open(**profile) as dst:
-                dst.write(data, 1)
+                dst.write(data)
             out = mem.read()
-        write_bytes("raw/dem.tif", out)
+        write_bytes(key, out)
         return out
 
 
 def risk_raster() -> tuple[np.ndarray, rasterio.Affine]:
     """0-1 terrain risk on the DEM grid (lon/lat)."""
-    # ponytail: pysheds 0.5 still calls np.in1d (removed in NumPy 2.4); drop once it's fixed.
+    # pysheds 0.5 still calls np.in1d (removed in NumPy 2.4); drop once it's fixed.
     np.in1d = getattr(np, "in1d", np.isin)
     from pysheds.grid import Grid
 

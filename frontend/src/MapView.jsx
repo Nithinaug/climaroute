@@ -36,7 +36,7 @@ function addLayers(map) {
   map.addLayer({ id: "cr-water", type: "circle", source: "cr-water",
     paint: { "circle-radius": 5, "circle-color": "#0ea5e9", "circle-stroke-width": 1.5,
              "circle-stroke-color": "#fff" } });
-  // Flood reports: amber with a dark ring, fading as the report ages (never red: red = destination).
+  // Reports fade as they age.
   map.addLayer({ id: "cr-reports", type: "circle", source: "cr-reports",
     paint: { "circle-radius": 10, "circle-color": "#f59e0b",
              "circle-opacity": ["+", 0.35, ["*", 0.65, ["get", "strength"]]],

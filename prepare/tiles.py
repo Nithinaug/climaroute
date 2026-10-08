@@ -1,4 +1,4 @@
-"""Sun positions and the tile inputs for the shade pipeline (brief section 3)."""
+"""Sun positions and the tile inputs for the shade pipeline."""
 
 import math
 from collections import defaultdict

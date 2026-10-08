@@ -1,4 +1,4 @@
-# Laptop-only (prepare/, monsoon/ offline steps). Never installed in the Lambda image.
+# Offline data build (prepare/, monsoon/)
 -r requirements-dev.txt
 geopandas==1.2.0
 osmnx==2.1.1
@@ -6,3 +6,4 @@ pandas==3.0.6
 pyproj==3.8.0
 pysheds==0.5
 rasterio==1.5.2
+osmium==4.3.1

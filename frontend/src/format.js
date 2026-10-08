@@ -1,4 +1,3 @@
-// Human-readable comparison of the safe route against the direct one.
 export function comparison(stats, mode) {
   const { safe, direct } = stats;
   const extra = Math.round(safe.duration_min - direct.duration_min);

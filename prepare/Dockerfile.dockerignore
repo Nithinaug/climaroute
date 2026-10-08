@@ -1,0 +1,8 @@
+*
+!requirements*.txt
+!shared/
+!routing/
+!shade/
+!monsoon/
+!prepare/
+**/__pycache__

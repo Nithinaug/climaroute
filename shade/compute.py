@@ -1,4 +1,4 @@
-"""Fraction of each street edge in building shadow, per time slot (brief section 3)."""
+"""Fraction of each street edge in building shadow, per time slot."""
 
 import math
 
