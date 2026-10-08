@@ -36,3 +36,16 @@ def write_bytes(key: str, data: bytes) -> None:
         path.write_bytes(data)
         return
     _s3().put_object(Bucket=bucket, Key=key, Body=data)
+
+
+def version(key: str) -> str:
+    """Changes whenever the stored file changes (S3 ETag, or local mtime). Cheap: no download."""
+    bucket = os.environ.get("DATA_BUCKET")
+    if not bucket:
+        return str((LOCAL_ROOT / key).stat().st_mtime_ns)
+    try:
+        return _s3().head_object(Bucket=bucket, Key=key)["ETag"]
+    except _s3().exceptions.ClientError as e:
+        if e.response["Error"]["Code"] in ("404", "NoSuchKey"):
+            raise FileNotFoundError(f"s3://{bucket}/{key}") from e
+        raise

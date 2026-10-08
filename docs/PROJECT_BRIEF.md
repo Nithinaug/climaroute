@@ -10,9 +10,13 @@ A web app that finds the **safest route on foot or by two-wheeler**
 (scooter/motorbike) between two points for current conditions:
 
 - **Summer mode:** prefers streets shaded by buildings, using the sun's
-  position at the departure time. Shows drinking-water points.
+  position at the departure time and the live heat. Suggests the best time to
+  leave in the next 3 hours. Shows drinking-water points.
 - **Monsoon mode:** avoids low-lying streets likely to waterlog, scaled by
-  current rainfall.
+  live rainfall per part of the city, known flood spots and crowd reports.
+  A "simulate heavy rain" switch demonstrates it on a dry day.
+- **Five cities:** Bengaluru, Delhi, Mumbai, Chennai, Hyderabad, chosen from a
+  dropdown; place search and street names via Amazon Location Service.
 
 It always returns two routes, the safe one and the direct (shortest) one, with
 a comparison, e.g. *"6 min longer, 65% shaded vs 20%"* or *"avoids 2
@@ -22,13 +26,15 @@ flood-risk streets"*.
 
 - Online AWS environmental hackathon, track **"Heat and Water"**: *"Too much
   water, too little of it, and the heat in between."*
-- 3 days, 4 people. Submission: demo video, README, write-up, architecture
-  diagram, live link. No live pitch.
+- 3 days (deadline 11 Oct 2026, 23:59), 4 people. Submission: demo video,
+  README, write-up, architecture diagram, live link. No live pitch.
+- The live stacks stay up for about a week after the deadline for judging,
+  then are destroyed (`terraform destroy` per workspace).
 - **Judges may open the live link days later with nobody around.** The app
   must work standalone, on live data only (no demo scenarios),
   and clear messages for anything outside the covered area.
 
-## Scope (deliberately small)
+## Scope
 
 - **Two transport options: walking and two-wheeler.** Pedestrians and
   two-wheeler riders are the most exposed to heat and street flooding
@@ -60,8 +66,8 @@ flood-risk streets"*.
   - OSM building coverage is excellent (~19k buildings traced in the wider
     area).
 - **Web only** (React, mobile-friendly layout). No native app.
-- Points outside the area get a "not covered yet" message. Scaling to more
-  areas is future scope (the pipeline is tile-based, so it repeats per area).
+- The map is locked to the selected city; taps outside it are ignored and
+  "Use my location" outside the city gets a clear message.
 
 ## How it works
 
@@ -112,8 +118,9 @@ Sanity-check a few known buildings before trusting it.
 ## Algorithms
 
 **Shade (offline):**
-- pvlib sun elevation and azimuth for each 15-minute slot over daylight hours,
-  for one chosen date.
+- Sun elevation and azimuth for each 15-minute slot over daylight hours
+  (built-in NOAA formula in `shade/sun.py`, within 0.5° of pvlib), for the
+  current date; recomputed weekly.
 - Each building's shadow = convex hull of its footprint and the footprint
   translated away from the sun by `height / tan(elevation)`.
 - Union all shadows, intersect with each street segment → fraction of each
@@ -151,12 +158,14 @@ Sanity-check a few known buildings before trusting it.
 
 | Layer | Tech |
 |---|---|
-| Frontend | React + Vite + MapLibre GL JS; Amazon Location Service for map tiles and place search; hosted on AWS Amplify |
+| Frontend | React + Vite + MapLibre GL JS, OpenFreeMap base map; hosted on AWS Amplify |
+| Place search and names | Amazon Location Service (Places: SearchText, ReverseGeocode), called from the API Lambda |
 | API | FastAPI on AWS Lambda (container image, Mangum adapter), behind API Gateway HTTP API |
 | Precompute pipeline | AWS Step Functions (Distributed Map over tiles) + Lambda |
 | Area build (prepare) | ECS Fargate task (4 vCPU / 30 GB), started on demand; too long and memory-heavy for Lambda |
 | Infrastructure as code | Terraform (S3 state backend) for all AWS resources, plus a few one-time console steps. No SAM, CDK or SDK-based deploy tooling |
-| Storage | S3 for raw data, tiles and the two graph files |
+| Storage | S3 (one bucket per city) for raw data, tiles and the two graph files; DynamoDB for flood reports |
+| Per city | Each city is a separate Terraform workspace with its own copy of every resource; one shared ECR repository |
 | Region | ap-south-1 (Mumbai) |
 
 All AWS work, deployment and integration are owned by one person (Nithin). No
@@ -207,60 +216,13 @@ Key decisions:
 
 - Building heights are estimated (satellite-derived or by building type), not
   surveyed.
-- Shade is computed for one representative date.
+- Shade is recomputed weekly for the current sun path, not daily.
 - Tree shade comes only from mapped and hand-marked trees.
-- Flood risk is a terrain model plus known spots, not a hydrological
-  simulation.
+- Flood risk is a terrain model plus known spots and crowd reports, not a
+  hydrological simulation.
+- Building coverage depends on Overture/OSM footprints (thinner in some areas;
+  Bengaluru still uses OSM-only footprints).
 - Travel times use constant speeds; no traffic or signal delays.
-
-## Before the hackathon (prep)
-
-Only non-code prep unless the rules say pre-built code is allowed.
-
-- [ ] Read the rules: pre-built code, AI-tool use and disclosure, submission
-      format, repo visibility, deadlines (with timezone).
-- [ ] Everyone: Python 3.12, Node 20+, Git, GitHub access, an editor. The
-      prepare/ person also needs QGIS (for eyeballing data).
-- [ ] Download and keep locally (public servers can be down on the day):
-  - OSM extract for the area (or note the exact OSMnx query to rerun)
-  - Open Buildings 2.5D heights clipped to the area (2023 band)
-  - Copernicus GLO-30 DEM tile covering Koramangala
-- [ ] Collect known waterlogging spots in the area from news reports (location,
-      date, source link). These become `known_flood_spots.geojson` and
-      evidence for the write-up.
-- [ ] Sanity-check heights for 3-4 buildings someone knows.
-- [ ] Pick 3-4 trips for the demo video (see Demo plan).
-- [ ] Nithin: AWS account ready (done), Terraform installed (1.10+), state
-      bucket created, practice deploy of FastAPI on Lambda with Terraform,
-      Amazon Location API key test, Amplify test.
-
-## Timeline and checkpoints
-
-**Day 1 — skeleton and mocks**
-- Hour 1: create repo, push this brief, agree open items, assign folders.
-- Morning: Nithin deploys mock `POST /route` (returns the example JSON) and
-  `GET /area`; Amplify serves the frontend shell. Everyone else builds
-  against mocks and small fake inputs.
-- Afternoon: Step Functions workflow deployed with a dummy tile function;
-  prepare/ produces real tiles and base graphs for the area.
-- **Checkpoint (evening):** frontend on the live URL calls the mock API and
-  draws two lines. Tiles exist in S3.
-
-**Day 2 — real data end to end**
-- Real `compute_tile_shade` and terrain risk; pipeline (or local runner)
-  produces real `walk.npz` / `two_wheeler.npz`.
-- Real `find_routes` replaces the mock in the API.
-- Validation (see Testing and validation).
-- **Checkpoint (evening):** one full real trip in each mode and transport on
-  the live URL. If not, freeze features and spend Day 3 fixing.
-
-**Day 3 — polish and submit**
-- Morning: out-of-area and error
-  messages, loading states, mobile layout check, warm-up ping.
-- **Feature freeze at midday.** After that, only bug fixes.
-- Afternoon: record demo video, write README and write-up, draw the
-  architecture diagram, final test of the live link from a phone and a
-  fresh browser, submit with time to spare.
 
 ## Development setup
 
@@ -284,16 +246,16 @@ Only non-code prep unless the rules say pre-built code is allowed.
 
 | Variable | Where | Purpose |
 |---|---|---|
-| `DATA_BUCKET` | api, pipeline Lambdas | S3 bucket; unset = local `./data/` |
+| `DATA_BUCKET` | api, pipeline Lambdas, prepare task | S3 bucket; unset = local `./data/` |
+| `AREA_NAME`, `AREA_BBOX` | api, pipeline, prepare | the city (from `infra/cities/<workspace>.tfvars`) |
+| `REPORTS_TABLE` | api | DynamoDB table for flood reports; unset = in memory |
+| `OSM_EXTRACT_URL` | prepare task | Geofabrik regional extract to clip the city from |
 | `ALLOWED_ORIGINS` | api | CORS: Amplify URL + `http://localhost:5173` |
 | `LOG_LEVEL` | api, pipeline | default `INFO` |
-| `VITE_API_URL` | frontend | API base URL |
-| `VITE_LOCATION_API_KEY` | frontend | Amazon Location API key (restricted, see below) |
-| `VITE_AWS_REGION` | frontend | `ap-south-1` |
+| `VITE_API_URLS` | frontend | comma-separated API URL of every city (`frontend/.env.production`) |
 
-No secrets in the repo. The Location API key is public by nature (it ships in
-the browser), so it is locked down by allowed referrers and allowed actions
-instead.
+No secrets in the repo. Amazon Location is called from the API Lambda with its
+IAM role, so no map key reaches the browser.
 
 ## Git workflow
 
@@ -307,24 +269,25 @@ instead.
 
 ## Frontend features
 
-Must have:
-- Full-screen MapLibre map of the area (Amazon Location map style), with the
-  covered area outlined.
-- Set origin and destination by place search (Amazon Location Places, biased
-  to the area), tapping the map, or "use my location" (browser geolocation).
+Built:
+- Full-screen MapLibre map (OpenFreeMap style), locked to the selected city.
+- City dropdown (city kept in the URL hash, e.g. `#delhi`).
+- From/To by place search (Amazon Location, limited to the city), tapping the
+  map (box fills with the street name), or "Use my location".
 - Toggles: mode (summer / monsoon), transport (walk / two-wheeler).
-- Departure time picker (default now). Rain scenario: live / heavy rain.
-- Draw both routes: safe route prominent, direct route faded/dashed.
-- Comparison card: e.g. "6 min longer · 65% shaded vs 20%" or "avoids 2
-  flood-risk streets".
-- Summer: drinking-water points layer. Monsoon: known flood spots layer.
-- Clear states: loading, out-of-area (show the area), no route, API error,
-  rain unavailable.
-- Mobile-first layout; works on a phone browser.
-- Accessibility basics: keyboard reachable controls, labels, colour is never
-  the only signal (route legend + text).
+- "Leaving at" time picker, default "Now", any minute.
+- Monsoon: "Simulate heavy rain (50 mm/h)" checkbox; result says live or simulated.
+- Routes: safe route solid green, direct route solid red; comparison card,
+  e.g. "2 min longer · 33% shaded vs 22%" or "avoids 14 flood-risk streets".
+  Durations over an hour show as "1 h 33 min".
+- Summer: "Best time to leave?" (next 3 h) with "Use this time".
+- Report flooding (amber dots that fade over 3 h), Use my location, Clear,
+  below the results.
+- Summer: drinking-water points at street zoom. Monsoon: known flood spots layer.
+- Clear states: loading, no route, API error, rain unavailable.
+- Mobile layout (bottom sheet); keyboard-reachable controls with labels.
 
-Nice to have: shade/flood heat-map layer on streets, street popups on tap,
+Not built (nice to have): shade/flood heat-map layer on streets, street popups,
 PWA install.
 
 ## AWS setup (Nithin)
@@ -335,26 +298,27 @@ PWA install.
 - **Pipeline:** tile-shade Lambda + merge Lambda + Step Functions workflow
   (Distributed Map, `MaxConcurrency` 150). The state machine definition lives
   in `infra/pipeline.asl.json`, loaded by Terraform with `templatefile`.
-- **One container image, three Lambdas:** API, tile-shade and merge share
+- **One container image, four Lambdas per city:** API, set-sun, tile-shade and merge share
   the image in ECR; each Lambda sets its own handler via `image_config`.
-- **Terraform manages:** S3 data bucket, ECR repo, IAM roles, the three
-  Lambdas, API Gateway HTTP API (CORS, throttling), Step Functions state
+- **Terraform manages (per city workspace):** S3 data bucket, IAM roles, the four
+  Lambdas, DynamoDB reports table, ECS cluster + Fargate prepare task, API Gateway HTTP API (CORS, throttling), Step Functions state
   machine, EventBridge warm-up schedule, CloudWatch log groups and alarm.
   State in an S3 backend with `use_lockfile = true` (Terraform 1.10+).
 - **Console (one-time):** Terraform state bucket, Amplify ↔ GitHub
-  connection, Amazon Location API key, budget, service quotas.
+  connection, service quotas (Lambda concurrency 400).
 - **Script:** `infra/push_image.sh` builds the image and pushes it to ECR
   (`aws ecr get-login-password | docker login`, `docker push`). Terraform
   doesn't build images.
 - **Only SDK use:** `shared/storage.py` uses boto3 (preinstalled in the
   Lambda base image) to read and write S3 at runtime. No other AWS SDK code.
-- **Storage:** one S3 bucket, private, versioning on.
+- **Storage:** one S3 bucket per city, private, versioning on.
 - **Frontend:** Amplify Hosting connected to GitHub `main`.
-- **Maps:** Amazon Location Service API key allowing only map tiles and place
-  search, restricted to the Amplify domain and localhost.
+- **Maps:** OpenFreeMap base map; Amazon Location Places (search, reverse
+  geocode) through the API Lambda's IAM role.
 - **Warm-up:** EventBridge schedule invokes the API Lambda every 5 minutes
   (preloading graphs) so judges rarely hit a cold start.
-- **Weekly shade:** EventBridge runs the Step Functions pipeline on Mondays at 05:00 IST (the sun moves <0.5° a day; weekly keeps the city run within the Lambda free tier). Run it by hand any time.
+- **Weekly shade:** EventBridge runs each city's pipeline on Mondays, staggered
+  05:00-07:00 IST (the sun moves <0.5° a day). Run it by hand any time.
   `SetSun` rewrites `tiles/index.json` for today's sun (built-in solar position,
   no pvlib), then tiles are shaded in parallel and merged (~45 s for Koramangala; Bengaluru's 5,025 tiles
   took 29 min at `MaxConcurrency` 50, ~10 min at 150, then merge ~3.5 min).
@@ -363,8 +327,8 @@ PWA install.
 - **Flood reports:** DynamoDB on-demand table with TTL.
 - **Observability:** CloudWatch logs (structured, one line per request with
   mode, transport, latency, error code); one alarm on API 5xx.
-- **Cost guard:** $10 monthly budget with alerts; API throttling; no
-  provisioned concurrency.
+- **Cost guard:** API throttling, weekly (not daily) shade, no provisioned
+  concurrency; a city shade run is ~$1-2.5. Stacks are destroyed after judging.
 
 ## Testing and validation
 
@@ -386,16 +350,14 @@ Validation (by eye, before trusting results):
 
 ## Demo plan
 
-- 3-4 trips that show clear differences under live conditions, e.g.:
-  1. Summer, walk, late afternoon on a hot day: shaded inner lanes vs exposed
-     main road (record when the live heat weight is high).
-  2. Monsoon, walk, during or just after real rain: detour around low-lying
-     streets near Sony World Signal / Ejipura.
-  3. Flood report: tap "Report flooding" on the route and show it re-route live.
-  4. Out-of-area point: friendly message.
-- Demo video (2-3 min): problem (heat + flooding in Bengaluru, news clips or
-  stats) → the app on a phone → each trip → architecture in 20 seconds →
-  scaling story.
+- Delhi, summer, walk, leaving 16:00: shaded route vs exposed main road, then
+  "Best time to leave" picks a later, shadier departure.
+- Mumbai or Chennai, monsoon: tick "Simulate heavy rain"; the safe route avoids
+  flood-risk streets the direct route crosses. Mention live rain is used otherwise.
+- Report flooding on the route and show it re-route at once.
+- City dropdown: all five cities, place search and street names.
+- 20 s of architecture: Fargate prepare, Step Functions fanning out to 150
+  Lambdas per city, Terraform workspace per city, serverless cost.
 
 ## Submission checklist
 
@@ -417,22 +379,19 @@ Validation (by eye, before trusting results):
 
 | Risk | Fallback |
 |---|---|
-| OSM / Overpass servers down | Data downloaded during prep and kept in S3 |
-| Open Buildings heights look wrong | Default heights by building type |
-| Step Functions pipeline not ready | Local runner, same functions, same output |
-| Real routing not ready by Day 2 evening | Mock API stays; freeze features, fix only |
-| Lambda cold start slow | Small image, graph loaded once, warm-up ping |
 | Open-Meteo down | 10-min cache (stale value reused); summer falls back to a default heat weight |
-| Amazon Location key/style problem | Free OpenFreeMap style for the base map |
-| Costs run away | API throttling, budget alerts, no provisioned concurrency |
+| No rain during judging | "Simulate heavy rain" switch in monsoon mode |
+| Lambda cold start slow | Warm-up ping every 5 min preloads the graphs |
+| A shade tile runs out of memory | shade-tile Lambda 2048 MB; a failed run leaves the previous graphs live |
+| Lambda concurrency (400) | MaxConcurrency 150 per city; at most 2 cities' pipelines at once; staggered weekly schedule |
+| Costs run away | API throttling (20 rps), weekly not daily shade, destroy after judging |
 
 ## Future scope
 
 - **Any area on demand:** compute tiles the first time someone routes there,
   cache in S3 (the tile pipeline already supports this).
-- **More cities** via batch runs of the same pipeline.
+- **More cities:** one more workspace + tfvars file each (about an hour of AWS time).
 - **Heat index:** add humidity to the live temperature/cloud heat factor.
-- **Weather per location** (several Open-Meteo grid points) for larger areas.
 - **Tree canopy** from satellite imagery instead of mapped trees.
 - **Better flood data:** rainfall nowcasts, drainage data, municipal flood
   reports; report moderation (confirmations, abuse limits).
@@ -440,14 +399,13 @@ Validation (by eye, before trusting results):
   routes.
 - **Live traffic** and signal delays for two-wheelers.
 - **Faster routing at city scale:** contraction hierarchies (as in OSRM).
-- **Native mobile apps** (Capacitor for Android/iOS), offline maps, push
+- **Native mobile apps**, offline maps, push
   alerts when a saved route floods.
 
 ## Interfaces
 
 Build against these, not against each other's code. If an interface needs
-to change, update it here in the same PR as the code. Items marked **TBD**
-are decided at kickoff.
+to change, update it here in the same PR as the code.
 
 ```
 prepare -> tiles -> shade (per tile) -> merge (+ monsoon terrain) -> walk.npz + two_wheeler.npz -> routing/ -> api/ -> frontend/
@@ -521,7 +479,7 @@ the shortest.
 | Key            | Type  | Example                     |
 |----------------|-------|-----------------------------|
 | `crs`          | str   | `"EPSG:32643"`              |
-| `area_name`    | str   | `"Koramangala, Bengaluru"`  |
+| `area_name`    | str   | `"Bengaluru"`               |
 | `transport`    | str   | `"walk"` or `"two_wheeler"` |
 | `shade_date`   | str   | `"2026-10-08"` (date the shade was computed for; set by each pipeline run, weekly) |
 | `slot_start`   | str   | `"06:00"` (local time of slot 0) |
@@ -564,7 +522,8 @@ building within `buffer_m` of the tile, where
 }
 ```
 
-`slots` has `slot_count` entries (section 2), from pvlib, computed in prepare.
+`slots` has `slot_count` entries (section 2), from `shade/sun.py`, rewritten for
+the current date by the pipeline's SetSun step.
 
 `tiles/<tile_id>/input.json`:
 
@@ -729,7 +688,7 @@ What the frontend needs to draw the covered area and summer extras.
 
 ```json
 {
-  "name": "Koramangala, Bengaluru",
+  "name": "Bengaluru",
   "bbox": [77.61, 12.92, 77.64, 12.94],
   "center": {"lat": 12.93, "lon": 77.625},
   "water_points": {"type": "FeatureCollection", "features": []},
@@ -770,7 +729,7 @@ where there is no boto3).
 Every non-200 response uses one shape:
 
 ```json
-{"error": {"code": "OUT_OF_AREA", "message": "Destination is outside the covered area (Koramangala)."}}
+{"error": {"code": "OUT_OF_AREA", "message": "Destination is outside the covered area (Bengaluru)."}}
 ```
 
 | HTTP | `code`         | When |
@@ -841,11 +800,11 @@ Current numbers (buildings from Overture, except Bengaluru which still uses OSM)
 A cross-city route takes ~0.4 s end to end. Prepare (Fargate, 4 vCPU / 30 GB)
 25-45 min per city; a shade run ~$1-2.5 of Lambda time (shade-tile Lambda 2048 MB).
 
-### Open items for kickoff
+### Settled values and open items
 
-- [x] Neighborhood: Koramangala (OSM coverage checked)
-- [x] `shade_date` 2026-04-15, slots 06:00-18:45 every 15 min
+- [x] Cities: Bengaluru, Delhi, Mumbai, Chennai, Hyderabad (bboxes in `infra/cities/`)
+- [x] Slots 06:00-18:45 every 15 min; shade recomputed weekly for the current date
 - [x] `risk_streets` threshold 0.5; `BLOCK_THRESHOLD` walk 0.85, two-wheeler 0.7
 - [x] Two-wheeler speed 5.0 m/s; tiles 500 m; low-sun cut-off 10°; snap 200 m
-- [ ] Verify `monsoon/known_flood_spots.geojson` locations and add news sources
-- [ ] Hand-mark drinking-water points (OSM has none in the area)
+- [ ] Add news source links to `monsoon/known_flood_spots.geojson` (43 spots, `source` is null)
+- [ ] Optional: rebuild Bengaluru with Overture footprints

@@ -73,13 +73,13 @@ class Net:
         if not points or not len(self.terrain):
             return
         # ponytail: checks street vertices only; a long straight segment past a spot can slip by.
-        tree = cKDTree(
-            np.column_stack([self.coords[:, 0] * self.kx, self.coords[:, 1] * M_PER_DEG_LAT])
-        )
-        hits = tree.query_ball_point(
-            [[lon * self.kx, lat * M_PER_DEG_LAT] for lat, lon in points], r=radius_m
-        )
-        idx = np.unique(np.concatenate([np.asarray(h, dtype=np.int64) for h in hits]))
+        lon, lat = self.coords[:, 0], self.coords[:, 1]
+        near = np.zeros(len(lat), dtype=bool)
+        for plat, plon in points:  # plain distance test: no index to build, ~ms per spot
+            near |= ((lat - plat) * M_PER_DEG_LAT) ** 2 + (
+                (lon - plon) * self.kx
+            ) ** 2 <= radius_m**2
+        idx = np.flatnonzero(near)
         self.terrain[np.searchsorted(self.coord_start, idx, side="right") - 1] = 1.0
 
     def street_coords(self, s: int) -> np.ndarray:

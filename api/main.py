@@ -22,6 +22,7 @@ from routing import NoRouteError, OutOfAreaError, find_routes, heat_factor, near
 from routing.net import Net
 from shared import area
 from shared.storage import read_bytes
+from shared.storage import version as storage_version
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 log = logging.getLogger("climaroute.api")
@@ -48,16 +49,23 @@ app.add_middleware(
 )
 
 
-GRAPH_REFRESH_S = 600  # pick up a new pipeline run (daily or manual) within 10 minutes
+GRAPH_CHECK_S = 60  # a new pipeline run is picked up within a minute
 
 
 def graph(transport: str):
-    """Latest graph, cached per container and re-read from storage every 10 minutes."""
-    return _load_graph(transport, int(time.time() // GRAPH_REFRESH_S))
+    """Latest graph. Its stored version is checked every GRAPH_CHECK_S; the (slow) download
+    happens only when a pipeline run has actually written a new one."""
+    key = f"graph/{transport}.npz"
+    return _load_graph(transport, _graph_version(key, int(time.time() // GRAPH_CHECK_S)))
+
+
+@lru_cache(maxsize=8)
+def _graph_version(key: str, _bucket: int) -> str:
+    return storage_version(key)
 
 
 @lru_cache(maxsize=4)
-def _load_graph(transport: str, _bucket: int):
+def _load_graph(transport: str, _version: str):
     net = Net.from_bytes(read_bytes(f"graph/{transport}.npz"))
     # Applied at load, so adding spots only needs a redeploy, not a rebuild of the city.
     net.mark_flood_spots(SPOT_POINTS, FLOOD_SPOT_RADIUS_M)
