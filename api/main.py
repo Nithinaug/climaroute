@@ -10,14 +10,14 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from mangum import Mangum
 from pydantic import BaseModel, Field
 
-from api import reports, weather
+from api import places, reports, weather
 from routing import NoRouteError, OutOfAreaError, find_routes, heat_factor, nearest_edge
 from routing.net import Net
 from shared import area
@@ -111,6 +111,16 @@ def get_area():
         "water_points": area.water_points(),
         "flood_spots": FLOOD_SPOTS,
     }
+
+
+@app.get("/search")
+def search(q: str = Query(min_length=2, max_length=100)):
+    try:
+        return {"results": places.search(q.strip())}
+    except places.SearchUnavailableError:
+        raise ApiError(
+            503, "SEARCH_UNAVAILABLE", "Place search isn't available right now."
+        ) from None
 
 
 @app.post("/route")

@@ -2,7 +2,7 @@ export function comparison(stats, mode) {
   const { safe, direct } = stats;
   const extra = Math.round(safe.duration_min - direct.duration_min);
   const time =
-    extra > 0 ? `${extra} min longer` : extra < 0 ? `${-extra} min shorter` : "Same time";
+    extra > 0 ? `${duration(extra)} longer` : extra < 0 ? `${duration(-extra)} shorter` : "Same time";
 
   if (mode === "summer") {
     if (safe.shaded_pct === direct.shaded_pct && extra === 0) {
@@ -39,4 +39,9 @@ export function todayAt(hhmm) {
   // Local wall-clock time today in Bengaluru (UTC+05:30), as ISO 8601 with offset.
   const now = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
   return `${now}T${hhmm}:00+05:30`;
+}
+
+export function duration(minutes) {
+  const m = Math.round(minutes);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
 }

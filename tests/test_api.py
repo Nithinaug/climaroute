@@ -125,3 +125,28 @@ def test_flood_report_must_be_on_a_street():
 
 def test_warmup_event_preloads_graphs():
     assert handler({"warmup": True}, None) == {"warm": True}
+
+
+def test_search(monkeypatch):
+    class Fake:
+        def search_text(self, **kw):
+            assert kw["Filter"]["BoundingBox"] == list(main.area.BBOX)
+            return {
+                "ResultItems": [
+                    {"Title": "Indiranagar", "Position": [77.63, 12.97]},
+                    {"Title": "x"},
+                ]
+            }
+
+    main.places.search.cache_clear()
+    monkeypatch.setattr(main.places, "_client", lambda: Fake())
+    r = client.get("/search", params={"q": "indira"})
+    assert r.json() == {"results": [{"name": "Indiranagar", "lat": 12.97, "lon": 77.63}]}
+
+
+def test_search_unavailable(monkeypatch):
+    main.places.search.cache_clear()
+    monkeypatch.setattr(main.places, "_client", lambda: 1 / 0)
+    r = client.get("/search", params={"q": "koramangala"})
+    assert r.status_code == 503 and r.json()["error"]["code"] == "SEARCH_UNAVAILABLE"
+    assert client.get("/search", params={"q": "k"}).status_code == 422

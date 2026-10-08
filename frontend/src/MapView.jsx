@@ -29,7 +29,7 @@ function addLayers(map) {
     paint: { "circle-radius": 14, "circle-color": "#3b82f6", "circle-opacity": 0.35 } });
   map.addLayer({ id: "cr-direct", type: "line", source: "cr-direct",
     layout: { "line-cap": "round" },
-    paint: { "line-color": COLORS.direct, "line-width": 4, "line-dasharray": [1.5, 1.5] } });
+    paint: { "line-color": COLORS.direct, "line-width": 4 } });
   map.addLayer({ id: "cr-safe", type: "line", source: "cr-safe",
     layout: { "line-cap": "round", "line-join": "round" },
     paint: { "line-color": COLORS.safe, "line-width": 6 } });

@@ -727,6 +727,14 @@ Crowd flood reports (DynamoDB `climaroute-flood-reports`, TTL on `expires_at`).
 FeatureCollection with `properties.age_min` and `properties.strength`. A report
 blocks its street for 1 h, then fades to nothing at 3 h.
 
+#### `GET /search?q=<text>`
+
+Place search via Amazon Location Service (Places API `SearchText`, called from the
+API Lambda so no map key reaches the browser), restricted to the area's bbox.
+`q` is 2-100 characters. Returns `{"results": [{"name": str, "lat": float, "lon": float}]}`
+(up to 5). `503 SEARCH_UNAVAILABLE` if the service can't be reached (always locally,
+where there is no boto3).
+
 #### `GET /health`
 
 `{"status": "ok"}`

@@ -51,8 +51,19 @@ button.link { border: 0; background: none; color: var(--teal); text-decoration: 
 .stat span:last-child { grid-column: 2; color: var(--muted); }
 .swatch { width: 18px; height: 6px; border-radius: 3px; margin-top: 7px; grid-row: span 2; }
 .swatch.safe { background: #16a34a; }
-.swatch.direct { background: repeating-linear-gradient(90deg, #dc2626 0 5px, transparent 5px 9px); }
+.swatch.direct { background: #dc2626; }
 
 .fine { margin: 0; font-size: 0.75rem; color: var(--muted); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
 .dot.report { background: #f59e0b; border: 2px solid #78350f; }
+
+.search { position: relative; }
+.search label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+.search input { font: inherit; font-size: 1rem; color: inherit; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.results { position: absolute; z-index: 2; left: 0; right: 0; margin: 4px 0 0; padding: 4px;
+  list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.12); }
+.results button { width: 100%; text-align: left; border: 0; background: none; padding: 8px;
+  border-radius: 6px; }
+.results button:hover, .results button:focus-visible { background: #f1f5f9; }

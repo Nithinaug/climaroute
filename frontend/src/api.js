@@ -33,3 +33,5 @@ export const getRoute = (params) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
+
+export const searchPlaces = (text) => request(`/search?q=${encodeURIComponent(text)}`);

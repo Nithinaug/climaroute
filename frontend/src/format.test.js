@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparison, conditionsText, todayAt } from "./format.js";
+import { comparison, conditionsText, todayAt, duration } from "./format.js";
 
 const stats = (safe, direct) => ({
   safe: { duration_min: 20, shaded_pct: null, risk_streets: null, reported_streets: 0, ...safe },
@@ -45,4 +45,10 @@ describe("conditionsText", () => {
       "31°C · 20% cloud · heat weight 0.53 · shade for 2026-10-08 · 1 flood report",
     );
   });
+});
+
+it("duration switches to hours from 60 min", () => {
+  expect(duration(45.4)).toBe("45 min");
+  expect(duration(93)).toBe("1 h 33 min");
+  expect(duration(120)).toBe("2 h 0 min");
 });

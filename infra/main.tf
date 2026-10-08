@@ -97,6 +97,7 @@ resource "aws_iam_role_policy" "lambda_data" {
       # ListBucket makes a missing key return NoSuchKey instead of AccessDenied.
       { Effect = "Allow", Action = "s3:ListBucket", Resource = aws_s3_bucket.data.arn },
       { Effect = "Allow", Action = ["dynamodb:PutItem", "dynamodb:Query"], Resource = aws_dynamodb_table.reports.arn },
+      { Effect = "Allow", Action = "geo-places:SearchText", Resource = "arn:aws:geo-places:${var.region}::provider/default" },
     ]
   })
 }

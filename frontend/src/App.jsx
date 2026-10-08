@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { getArea, getReports, getRoute, postReport } from "./api.js";
-import { comparison, conditionsText, todayAt } from "./format.js";
+import { getArea, getReports, getRoute, postReport, searchPlaces } from "./api.js";
+import { comparison, conditionsText, duration, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
 
 const inArea = (area, p) =>
@@ -19,13 +19,61 @@ function Toggle({ label, value, options, onChange }) {
   );
 }
 
+const MAP_POINT = "Point on map";
+
+function PlaceSearch({ label, place, onSelect }) {
+  const [text, setText] = useState("");
+  const [results, setResults] = useState([]);
+  const shown = place ? (place.name ?? MAP_POINT) : "";
+
+  useEffect(() => setText(shown), [shown]);
+
+  useEffect(() => {
+    if (text.trim().length < 3 || text === shown) return setResults([]);
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchPlaces(text.trim())
+        .then((r) => !cancelled && setResults(r.results))
+        .catch(() => !cancelled && setResults([]));
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [text, shown]);
+
+  return (
+    <div className="search">
+      <label>
+        {label}
+        <input
+          type="search"
+          value={text}
+          placeholder="Search a place, or tap the map"
+          onChange={(e) => setText(e.target.value)}
+          onFocus={(e) => text === MAP_POINT && e.target.select()}
+        />
+      </label>
+      {results.length > 0 && (
+        <ul className="results">
+          {results.map((r) => (
+            <li key={`${r.lat},${r.lon}`}>
+              <button type="button" onClick={() => onSelect(r)}>{r.name}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function Stats({ title, s, mode, swatch }) {
   return (
     <div className="stat">
       <span className={`swatch ${swatch}`} aria-hidden="true" />
       <strong>{title}</strong>
       <span>
-        {(s.distance_m / 1000).toFixed(1)} km · {Math.round(s.duration_min)} min ·{" "}
+        {(s.distance_m / 1000).toFixed(1)} km · {duration(s.duration_min)} ·{" "}
         {mode === "summer" ? `${s.shaded_pct}% shaded` : `${s.risk_streets} flood-risk streets`}
       </span>
     </div>
@@ -88,8 +136,8 @@ export default function App() {
     setLoading(true);
     setError(null);
     getRoute({
-      origin,
-      destination,
+      origin: { lat: origin.lat, lon: origin.lon },
+      destination: { lat: destination.lat, lon: destination.lon },
       mode,
       transport,
       ...(time && { departure_time: todayAt(time) }),
@@ -122,9 +170,9 @@ export default function App() {
   const hint = reporting
     ? "Tap the flooded street on the map."
     : !origin
-    ? "Tap the map to set your start."
+    ? "Search or tap the map to set your start."
     : !destination
-      ? "Now tap your destination."
+      ? "Now search or tap your destination."
       : null;
 
   return (
@@ -143,6 +191,11 @@ export default function App() {
           <h1>ClimaRoute</h1>
           <p className="tagline">Shaded routes in the heat. Dry routes in the rain.</p>
         </header>
+
+        <PlaceSearch label="From" place={origin}
+          onSelect={(p) => { setError(null); setResult(null); setOrigin(p); }} />
+        <PlaceSearch label="To" place={destination}
+          onSelect={(p) => { setError(null); setResult(null); setDestination(p); }} />
 
         <Toggle label="Conditions" value={mode} onChange={setMode}
           options={[["summer", "☀️ Summer"], ["monsoon", "🌧️ Monsoon"]]} />
