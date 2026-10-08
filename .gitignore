@@ -20,6 +20,7 @@ node_modules/
 dist/
 .env*
 !.env.example
+!.env.production
 
 # osmnx HTTP cache
 cache/

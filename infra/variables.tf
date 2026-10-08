@@ -4,13 +4,12 @@ variable "region" {
 }
 
 variable "image_tag" {
-  description = "ECR image tag to deploy (printed by push_image.sh)"
+  description = "ECR image tag to deploy (printed by push_image.sh, or the current one from: aws lambda get-function --function-name climaroute-api --query Code.ImageUri)"
   type        = string
-  default     = ""
 }
 
 variable "allowed_origins" {
   description = "CORS origins for the API (Amplify URL + local dev)"
   type        = list(string)
-  default     = ["http://localhost:5173"]
+  default     = ["https://main.d1lxnvpn0ohz9a.amplifyapp.com", "http://localhost:5173"]
 }
