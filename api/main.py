@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -26,9 +26,19 @@ from shared.storage import read_bytes
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 log = logging.getLogger("climaroute.api")
 TZ = ZoneInfo(area.TIMEZONE)
-FLOOD_SPOTS = json.loads(
+_ALL_SPOTS = json.loads(
     (Path(__file__).parent.parent / "monsoon" / "known_flood_spots.geojson").read_text()
 )
+FLOOD_SPOTS = {  # this city's spots only
+    "type": "FeatureCollection",
+    "features": [
+        f for f in _ALL_SPOTS["features"] if area.contains(*reversed(f["geometry"]["coordinates"]))
+    ],
+}
+SPOT_POINTS = [tuple(reversed(f["geometry"]["coordinates"])) for f in FLOOD_SPOTS["features"]]
+FLOOD_SPOT_RADIUS_M = 60.0
+SENSITIVE_HEAT, SENSITIVE_RAIN = 2.0, 1.5
+BEST_TIME_STEP_MIN, BEST_TIME_STEPS = 30, 7  # now .. +3 h
 
 app = FastAPI(title="ClimaRoute API")
 app.add_middleware(
@@ -49,7 +59,10 @@ def graph(transport: str):
 
 @lru_cache(maxsize=4)
 def _load_graph(transport: str, _bucket: int):
-    return Net.from_bytes(read_bytes(f"graph/{transport}.npz"))
+    net = Net.from_bytes(read_bytes(f"graph/{transport}.npz"))
+    # Applied at load, so adding spots only needs a redeploy, not a rebuild of the city.
+    net.mark_flood_spots(SPOT_POINTS, FLOOD_SPOT_RADIUS_M)
+    return net
 
 
 class ApiError(Exception):
@@ -90,6 +103,10 @@ class RouteRequest(BaseModel):
     mode: Literal["summer", "monsoon"]
     transport: Literal["walk", "two_wheeler"] = "walk"
     departure_time: datetime | None = None
+    # Monsoon demo on a dry day: use this rainfall instead of the live value.
+    simulate_rain_mm_per_hour: float | None = Field(default=None, ge=0, le=200)
+    # Elderly, children, health conditions: weigh heat and flooding more heavily.
+    sensitive: bool = False
 
 
 class ReportRequest(BaseModel):
@@ -145,19 +162,28 @@ def route(req: RouteRequest):
     departure = req.departure_time or datetime.now(TZ)
     departure = departure.replace(tzinfo=TZ) if departure.tzinfo is None else departure
     rain_mm, temperature, cloud, heat = 0.0, None, None, 1.0
-    if req.mode == "monsoon":
+    trip_a, trip_b = (req.origin.lat, req.origin.lon), (req.destination.lat, req.destination.lon)
+    if req.mode == "monsoon" and req.simulate_rain_mm_per_hour is not None:
+        rain_mm = req.simulate_rain_mm_per_hour
+    elif req.mode == "monsoon":
         try:
-            rain_mm = weather.effective_rain(weather.current())
+            rain_mm, _ = weather.trip(weather.current(), trip_a, trip_b)
         except weather.WeatherUnavailableError:
             raise ApiError(
                 503, "RAIN_UNAVAILABLE", "Live rainfall is unavailable. Please try again shortly."
             ) from None
     else:
         try:
-            temperature, cloud = weather.at(weather.current(), departure)
+            temperature, cloud = weather.at(
+                weather.trip(weather.current(), trip_a, trip_b)[1], departure
+            )
             heat = heat_factor(temperature, cloud)
         except weather.WeatherUnavailableError:
             log.warning("weather unavailable; using default heat factor")
+
+    if req.sensitive:
+        heat *= SENSITIVE_HEAT
+        rain_mm *= SENSITIVE_RAIN
 
     active_reports = reports.active()
     try:
@@ -180,12 +206,14 @@ def route(req: RouteRequest):
         "mode": req.mode,
         "transport": req.transport,
         "rain_mm_per_hour": rain_mm,
+        "rain_simulated": req.mode == "monsoon" and req.simulate_rain_mm_per_hour is not None,
         "slot_time": departure.astimezone(TZ).strftime("%H:%M"),
         "temperature_c": temperature,
         "cloud_cover_pct": cloud,
         "heat_factor": heat if req.mode == "summer" else None,
         "shade_date": graph(req.transport).meta.get("shade_date"),
         "active_reports": len(active_reports),
+        "sensitive": req.sensitive,
     }
     log.info(
         json.dumps(
@@ -198,6 +226,29 @@ def route(req: RouteRequest):
         )
     )
     return result
+
+
+@app.post("/best-time")
+def best_time(req: RouteRequest):
+    """Summer: the safe route's shade and heat if you leave now or in the next 3 hours."""
+    start = req.departure_time or datetime.now(TZ)
+    start = start.replace(tzinfo=TZ) if start.tzinfo is None else start
+    options = []
+    for i in range(BEST_TIME_STEPS):
+        when = start + timedelta(minutes=i * BEST_TIME_STEP_MIN)
+        body = route(req.model_copy(update={"mode": "summer", "departure_time": when}))
+        safe, c = body["stats"]["safe"], body["conditions"]
+        options.append(
+            {
+                "time": c["slot_time"],
+                "shaded_pct": safe["shaded_pct"],
+                "temperature_c": c["temperature_c"],
+                "heat_factor": c["heat_factor"],
+                # Sun exposure that actually matters: unshaded share x how hot it is.
+                "exposure": round((100 - safe["shaded_pct"]) / 100 * (c["heat_factor"] or 0), 3),
+            }
+        )
+    return {"options": options, "best": min(options, key=lambda o: o["exposure"])}
 
 
 def _report_feature(r: dict, now: float) -> dict:

@@ -1,14 +1,693 @@
 {
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": {"type": "Point", "coordinates": [77.6265, 12.9367]},
-      "properties": {
-        "name": "Sony World Signal",
-        "note": "Approximate location. Verify on the map and add the news source link.",
-        "source": null
-      }
-    }
-  ]
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.6202,
+     12.91656
+    ]
+   },
+   "properties": {
+    "name": "Silk Board Junction",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.62728,
+     12.93726
+    ]
+   },
+   "properties": {
+    "name": "Sony World Signal Koramangala",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.67551,
+     12.92558
+    ]
+   },
+   "properties": {
+    "name": "Bellandur Outer Ring Road",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.58918,
+     13.03664
+    ]
+   },
+   "properties": {
+    "name": "Hebbal Flyover",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.66889,
+     12.99686
+    ]
+   },
+   "properties": {
+    "name": "Tin Factory KR Puram",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.66633,
+     12.99409
+    ]
+   },
+   "properties": {
+    "name": "Mahadevapura",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.68116,
+     12.94631
+    ]
+   },
+   "properties": {
+    "name": "Yemalur",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.70213,
+     12.95669
+    ]
+   },
+   "properties": {
+    "name": "Marathahalli Bridge",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.60283,
+     12.9836
+    ]
+   },
+   "properties": {
+    "name": "Shivajinagar Bus Station",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.66494,
+     12.92083
+    ]
+   },
+   "properties": {
+    "name": "Sarjapur Road Junction",
+    "city": "Bengaluru",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.22784,
+     28.63362
+    ]
+   },
+   "properties": {
+    "name": "Minto Bridge",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.24422,
+     28.62896
+    ]
+   },
+   "properties": {
+    "name": "ITO Delhi",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.29417,
+     28.50004
+    ]
+   },
+   "properties": {
+    "name": "Pul Prahladpur Underpass",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.20865,
+     28.66503
+    ]
+   },
+   "properties": {
+    "name": "Azad Market Underpass",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.1638,
+     28.59364
+    ]
+   },
+   "properties": {
+    "name": "Dhaula Kuan",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.23469,
+     28.56819
+    ]
+   },
+   "properties": {
+    "name": "Moolchand Flyover",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.23883,
+     28.61633
+    ]
+   },
+   "properties": {
+    "name": "Pragati Maidan Tunnel",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     77.2301,
+     28.66866
+    ]
+   },
+   "properties": {
+    "name": "Kashmere Gate ISBT",
+    "city": "Delhi",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.84255,
+     19.01003
+    ]
+   },
+   "properties": {
+    "name": "Hindmata Dadar",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.84283,
+     19.09054
+    ]
+   },
+   "properties": {
+    "name": "Milan Subway Santacruz",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.84794,
+     19.12424
+    ]
+   },
+   "properties": {
+    "name": "Andheri Subway",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.85868,
+     19.03193
+    ]
+   },
+   "properties": {
+    "name": "Gandhi Market Sion",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.84228,
+     18.99622
+    ]
+   },
+   "properties": {
+    "name": "Parel TT",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.87914,
+     19.03386
+    ]
+   },
+   "properties": {
+    "name": "Wadala",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.84861,
+     19.18949
+    ]
+   },
+   "properties": {
+    "name": "Malad Subway",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     72.85578,
+     19.02709
+    ]
+   },
+   "properties": {
+    "name": "Kings Circle Matunga",
+    "city": "Mumbai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.21847,
+     12.97938
+    ]
+   },
+   "properties": {
+    "name": "Velachery",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.20857,
+     12.96442
+    ]
+   },
+   "properties": {
+    "name": "Madipakkam",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.22101,
+     12.95557
+    ]
+   },
+   "properties": {
+    "name": "Pallikaranai",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.18089,
+     12.98361
+    ]
+   },
+   "properties": {
+    "name": "Ganesapuram Subway",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.22584,
+     13.0418
+    ]
+   },
+   "properties": {
+    "name": "Duraisamy Subway T Nagar",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.26469,
+     13.11036
+    ]
+   },
+   "properties": {
+    "name": "Vyasarpadi",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.19881,
+     13.03897
+    ]
+   },
+   "properties": {
+    "name": "KK Nagar Chennai",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     80.21195,
+     13.03562
+    ]
+   },
+   "properties": {
+    "name": "Ashok Nagar Chennai",
+    "city": "Chennai",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.51568,
+     17.37493
+    ]
+   },
+   "properties": {
+    "name": "Malakpet",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.4217,
+     17.39163
+    ]
+   },
+   "properties": {
+    "name": "Tolichowki",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.46528,
+     17.42293
+    ]
+   },
+   "properties": {
+    "name": "Khairatabad",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.46713,
+     17.40156
+    ]
+   },
+   "properties": {
+    "name": "Lakdikapul",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.45168,
+     17.42773
+    ]
+   },
+   "properties": {
+    "name": "Panjagutta",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.47501,
+     17.44628
+    ]
+   },
+   "properties": {
+    "name": "Rasoolpura",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.47074,
+     17.44372
+    ]
+   },
+   "properties": {
+    "name": "Begumpet",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.452,
+     17.40281
+    ]
+   },
+   "properties": {
+    "name": "Masab Tank",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     78.55483,
+     17.33953
+    ]
+   },
+   "properties": {
+    "name": "Chintalkunta",
+    "city": "Hyderabad",
+    "source": null,
+    "note": "Repeatedly reported waterlogging location; position from Amazon Location search. Add a news link in source."
+   }
+  }
+ ]
 }

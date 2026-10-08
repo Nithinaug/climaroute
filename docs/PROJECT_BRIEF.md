@@ -495,7 +495,9 @@ write_bytes("graph/walk.npz", payload)     # bytes -> None
 | `graph/walk.npz`, `graph/two_wheeler.npz` | merge | api, routing | see section 2 |
 | `data/water_points.geojson`    | prepare          | api            | FeatureCollection of Points, WGS84 |
 
-Hand-marked known flood spots live in the repo at
+Known flood spots (43 across the 5 cities, positions from Amazon Location search; add news
+links in `source`) are applied when the API loads a graph (streets within 60 m get terrain
+risk 1.0), so adding a spot needs only a redeploy. They live in the repo at
 `monsoon/known_flood_spots.geojson` (versioned, served by `GET /area`).
 
 ### 2. Graph files (`graph/walk.npz`, `graph/two_wheeler.npz`)
@@ -612,7 +614,8 @@ def rain_factor(rain_mm_per_hour: float) -> float  # 0.0-1.0, non-decreasing, 0 
 ```
 
 `flood_risk = terrain_risk * rain_factor(rain)` per edge, at request time.
-Live rain = Open-Meteo, cached 10 min
+Live rain = Open-Meteo on a ~9 km grid over the city (16 points for Bengaluru; each trip uses
+the worst rain among cells its box touches, and the nearest cell for heat), cached 10 min
 (api/weather.py): the larger of the current rate and each of the past 6 hours'
 rain decayed with a 1.5 h drainage half-life, so risk lingers after a storm.
 
@@ -695,6 +698,7 @@ Request:
   "mode": "summer",
   "transport": "walk",
   "departure_time": "2026-10-08T14:30:00+05:30",
+  "simulate_rain_mm_per_hour": 50,       // optional, monsoon demo: overrides live rain (0-200)
 }
 ```
 
@@ -742,6 +746,14 @@ Crowd flood reports (DynamoDB `climaroute-flood-reports`, TTL on `expires_at`).
 `201` with a GeoJSON Point Feature. `GET` returns active reports as a
 FeatureCollection with `properties.age_min` and `properties.strength`. A report
 blocks its street for 1 h, then fades to nothing at 3 h.
+
+`RouteRequest` also takes `"sensitive": true` (elderly, children): heat weight x2 and rain x1.5.
+
+#### `POST /best-time`
+
+Same body as `/route`. Runs the summer route for now and every 30 min for 3 h and returns
+`{"options": [{"time", "shaded_pct", "temperature_c", "heat_factor", "exposure"}], "best": <option>}`,
+where `exposure = (1 - shaded) x heat_factor` (lower is better). ~7 route runs, so ~2-3 s.
 
 #### `GET /search?q=<text>`
 

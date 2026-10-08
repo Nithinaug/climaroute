@@ -68,6 +68,20 @@ class Net:
     def street_index(self) -> dict[str, int]:
         return {s: i for i, s in enumerate(self.street_id.tolist())}
 
+    def mark_flood_spots(self, points: list[tuple[float, float]], radius_m: float) -> None:
+        """Streets passing within radius_m of a known flood spot (lat, lon) get terrain risk 1.0."""
+        if not points or not len(self.terrain):
+            return
+        # ponytail: checks street vertices only; a long straight segment past a spot can slip by.
+        tree = cKDTree(
+            np.column_stack([self.coords[:, 0] * self.kx, self.coords[:, 1] * M_PER_DEG_LAT])
+        )
+        hits = tree.query_ball_point(
+            [[lon * self.kx, lat * M_PER_DEG_LAT] for lat, lon in points], r=radius_m
+        )
+        idx = np.unique(np.concatenate([np.asarray(h, dtype=np.int64) for h in hits]))
+        self.terrain[np.searchsorted(self.coord_start, idx, side="right") - 1] = 1.0
+
     def street_coords(self, s: int) -> np.ndarray:
         return self.coords[self.coord_start[s] : self.coord_start[s + 1]]
 

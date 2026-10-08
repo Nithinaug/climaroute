@@ -144,3 +144,12 @@ def test_shade_blends_between_slots():
     when = datetime(2026, 4, 15, 6, 7, 30, tzinfo=TZ)  # halfway between 06:00 and 06:15
     assert street_shade(net, slot_index(net.meta, when))[0] == pytest.approx(0.5)
     assert street_shade(net, None)[0] == 1.0
+
+
+def test_mark_flood_spots_sets_nearby_streets_to_full_risk():
+    net = from_graph(_graph())
+    net.terrain[:] = 0.0
+    lat, lon = net.street_coords(0)[0][::-1]
+    net.mark_flood_spots([(lat, lon)], radius_m=5)
+    assert net.terrain[0] == 1.0 and net.terrain.sum() < len(net.terrain)
+    net.mark_flood_spots([], radius_m=5)  # no spots: no error

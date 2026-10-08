@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { API_URLS, getArea, getPlaceName, getReports, getRoute, postReport, searchPlaces, setCityApi } from "./api.js";
+import { API_URLS, getArea, getBestTime, getPlaceName, getReports, getRoute, postReport, searchPlaces, setCityApi } from "./api.js";
 import { comparison, conditionsText, duration, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
 
@@ -24,6 +24,7 @@ const nameIt = (p, set) =>
   getPlaceName(p)
     .then(({ name }) => name && set((cur) => (cur?.lat === p.lat && cur?.lon === p.lon ? { ...cur, name } : cur)))
     .catch(() => {});
+const SIMULATED_RAIN = 50; // mm/h: a heavy Indian monsoon downpour
 const slug = (name) => name.toLowerCase().split(",")[0].trim().replace(/\s+/g, "-");
 
 function PlaceSearch({ label, place, onSelect }) {
@@ -90,6 +91,9 @@ export default function App() {
   const [mode, setMode] = useState("summer");
   const [transport, setTransport] = useState("walk");
   const [time, setTime] = useState(""); // "" = leave now
+  const [simulateRain, setSimulateRain] = useState(false);
+  const [sensitive, setSensitive] = useState(false);
+  const [best, setBest] = useState(null);
   const [reports, setReports] = useState(null);
   const [reporting, setReporting] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -157,12 +161,15 @@ export default function App() {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setBest(null);
     getRoute({
       origin: { lat: origin.lat, lon: origin.lon },
       destination: { lat: destination.lat, lon: destination.lon },
       mode,
       transport,
       ...(time && { departure_time: todayAt(time) }),
+      ...(mode === "monsoon" && simulateRain && { simulate_rain_mm_per_hour: SIMULATED_RAIN }),
+      sensitive,
     })
       .then((r) => !cancelled && setResult(r))
       .catch((e) => {
@@ -175,7 +182,19 @@ export default function App() {
       cancelled = true;
     };
   // Coordinates, not objects: adding a place name to a point must not re-route.
-  }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, reports]);
+  }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, simulateRain, sensitive, reports]);
+
+  const findBestTime = () =>
+    getBestTime({
+      origin: { lat: origin.lat, lon: origin.lon },
+      destination: { lat: destination.lat, lon: destination.lon },
+      mode: "summer",
+      transport,
+      sensitive,
+      ...(time && { departure_time: todayAt(time) }),
+    })
+      .then(setBest)
+      .catch((e) => setError(e.message));
 
   const useMyLocation = () => {
     if (!navigator.geolocation) return setError("Location isn't available in this browser.");
@@ -237,6 +256,18 @@ export default function App() {
         <Toggle label="Travelling by" value={transport} onChange={setTransport}
           options={[["walk", "🚶 Walk"], ["two_wheeler", "🛵 Two-wheeler"]]} />
 
+        <label className="simulate">
+          <input type="checkbox" checked={sensitive} onChange={(e) => setSensitive(e.target.checked)} />
+          Heat-sensitive (elderly, children)
+        </label>
+
+        {mode === "monsoon" && (
+          <label className="simulate">
+            <input type="checkbox" checked={simulateRain} onChange={(e) => setSimulateRain(e.target.checked)} />
+            Simulate heavy rain ({SIMULATED_RAIN} mm/h)
+          </label>
+        )}
+
         {mode === "summer" && (
           <div className="row">
             <label className="time">
@@ -270,6 +301,18 @@ export default function App() {
             <section className="result">
               <p className="headline">{comparison(result.stats, mode)}</p>
               <Stats title="Safe route" s={result.stats.safe} mode={mode} swatch="safe" />
+              {mode === "summer" && !best && (
+                <button type="button" className="link" onClick={findBestTime}>Best time to leave?</button>
+              )}
+              {best && (
+                <p className="notice">
+                  Best in the next 3 h: leave at <strong>{best.best.time}</strong> ({best.best.shaded_pct}% shaded
+                  {best.best.temperature_c != null && `, ${Math.round(best.best.temperature_c)}°C`}).{" "}
+                  {best.best.time !== best.options[0].time && (
+                    <button type="button" className="link" onClick={() => setTime(best.best.time)}>Use this time</button>
+                  )}
+                </p>
+              )}
               <Stats title="Direct route" s={result.stats.direct} mode={mode} swatch="direct" />
               <p className="fine">{conditionsText(result.conditions, mode)}</p>
               {reports?.features?.length > 0 && (

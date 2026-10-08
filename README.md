@@ -104,4 +104,17 @@ Each city is its own copy of the backend in a Terraform workspace (`default` is 
 `area_bbox` and `osm_extract_url` (Geofabrik zone). Add its `api_url` to `VITE_API_URLS` in
 `frontend/.env.production`.
 
+## Limitations
+
+- Building heights are satellite estimates (Google Open Buildings) or defaults by building type,
+  not surveys. Footprint coverage depends on Overture/OSM and is thinner in some neighbourhoods.
+- Tree shade only covers trees mapped in OpenStreetMap.
+- Flood risk is a terrain model (30 m elevation) plus known waterlogging spots and user reports,
+  not a hydrological simulation. Flooding with no local rain (lake overflow, blocked drains) is
+  only caught if someone reports it.
+- Weather is read at one point per city, so very local storms can be missed.
+- Shade is recomputed weekly for the current sun path; within a week the difference is small.
+- Travel times use constant speeds; no live traffic or road closures.
+- Flood reports are anonymous and unverified, so a false report can block a street for up to 3 h.
+
 Design notes for contributors: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).

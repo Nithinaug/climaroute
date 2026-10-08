@@ -43,3 +43,10 @@ export const getRoute = (params) =>
 export const searchPlaces = (text) => request(`/search?q=${encodeURIComponent(text)}`);
 
 export const getPlaceName = ({ lat, lon }) => request(`/place?lat=${lat}&lon=${lon}`);
+
+export const getBestTime = (params) =>
+  request("/best-time", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });

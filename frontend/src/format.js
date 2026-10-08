@@ -29,8 +29,9 @@ export function conditionsText(c, mode) {
     if (c.heat_factor != null) parts.push(`heat weight ${c.heat_factor}`);
     if (c.shade_date) parts.push(`shade for ${c.shade_date}`);
   } else {
-    parts.push(`Rain ${c.rain_mm_per_hour} mm/h`);
+    parts.push(`Rain ${c.rain_mm_per_hour} mm/h${c.rain_simulated ? " (simulated)" : " (live)"}`);
   }
+  if (c.sensitive) parts.push("heat-sensitive");
   if (c.active_reports) parts.push(`${c.active_reports} flood report${c.active_reports === 1 ? "" : "s"}`);
   return parts.join(" · ");
 }

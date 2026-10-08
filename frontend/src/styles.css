@@ -71,3 +71,5 @@ button.link { border: 0; background: none; color: var(--teal); text-decoration: 
 .city { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
 .city select { font: inherit; font-size: 1rem; color: inherit; padding: 8px 10px;
   border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+
+.simulate { display: flex; gap: 8px; align-items: center; font-size: 0.95rem; }

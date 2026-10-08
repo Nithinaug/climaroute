@@ -35,7 +35,7 @@ def fakes(monkeypatch):
         return merge_graph(from_graph(g), shade, dummy_area.terrain(dummy_area.build_graph("walk")))
 
     monkeypatch.setattr(main, "graph", load)
-    monkeypatch.setattr(weather, "_cache", {"value": weather.parse(SAMPLE), "at": 1e18})
+    monkeypatch.setattr(weather, "_cache", {"value": [weather.parse(SAMPLE)], "at": 1e18})
     monkeypatch.delenv("REPORTS_TABLE", raising=False)
     monkeypatch.setattr(reports, "_local", [])
 
@@ -166,3 +166,31 @@ def test_place_name(monkeypatch):
     monkeypatch.setattr(main.places, "_client", lambda: Fake())
     r = client.get("/place", params={"lat": 12.97841, "lon": 77.64079})
     assert r.json() == {"name": "100 Feet Rd, Indiranagar"}
+
+
+def test_monsoon_simulated_rain_overrides_live():
+    c = _route(mode="monsoon", simulate_rain_mm_per_hour=60).json()["conditions"]
+    assert c["rain_mm_per_hour"] == 60 and c["rain_simulated"] is True
+    assert _route(mode="monsoon").json()["conditions"]["rain_simulated"] is False
+    assert _route(mode="monsoon", simulate_rain_mm_per_hour=500).status_code == 422
+
+
+def test_sensitive_weighs_heat_more():
+    normal = _route(departure_time="2026-04-15T16:00:00+05:30").json()["conditions"]
+    sens = _route(departure_time="2026-04-15T16:00:00+05:30", sensitive=True).json()["conditions"]
+    assert sens["heat_factor"] == pytest.approx(normal["heat_factor"] * 2) and sens["sensitive"]
+
+
+def test_best_time_lists_next_three_hours():
+    body = client.post(
+        "/best-time",
+        json={
+            "origin": INSIDE_A,
+            "destination": INSIDE_B,
+            "mode": "summer",
+            "departure_time": "2026-04-15T15:00:00+05:30",
+        },
+    ).json()
+    times = [o["time"] for o in body["options"]]
+    assert times[0] == "15:00" and times[-1] == "18:00" and len(times) == 7
+    assert body["best"] in body["options"]
