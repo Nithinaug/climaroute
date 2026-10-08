@@ -88,11 +88,4 @@ infra/run_prepare.sh                             # build the area's data
 aws stepfunctions start-execution --state-machine-arn $(terraform -chdir=infra output -raw pipeline_arn)
 ```
 
-## Limitations
-
-- Building heights are satellite estimates or defaults by building type, not surveys.
-- Tree shade only covers trees mapped in OpenStreetMap.
-- Flood risk is a terrain model plus known spots and user reports, not a hydrological simulation.
-- Travel times use constant speeds; no live traffic.
-
 Design notes for contributors: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).
