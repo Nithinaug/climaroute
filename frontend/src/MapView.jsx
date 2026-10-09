@@ -103,7 +103,8 @@ export default function MapView({ area, origin, destination, result, mode, repor
   return (
     <div
       ref={container}
-      className="map"
+      // Inline: MapLibre's unlayered CSS sets position: relative and beats Tailwind's layered utilities.
+      style={{ position: "absolute", inset: 0 }}
       role="application"
       aria-label="Map. Tap to set the start, then the destination."
     />

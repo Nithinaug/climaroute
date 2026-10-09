@@ -119,7 +119,7 @@ Data:
 | Map tiles: OpenFreeMap, OpenMapTiles schema | OpenFreeMap terms; OpenMapTiles CC BY 4.0 |
 | Place search and names: Amazon Location Service (HERE / Esri data) | AWS service terms |
 
-Main libraries: MapLibre GL JS (BSD-3), React (MIT), Vite (MIT), FastAPI (MIT), Mangum (MIT),
+Main libraries: MapLibre GL JS (BSD-3), React (MIT), Vite (MIT), Tailwind CSS (MIT), Motion (MIT), Material Symbols (Apache-2.0), FastAPI (MIT), Mangum (MIT),
 NumPy and SciPy (BSD-3), Shapely (BSD-3), OSMnx (MIT), NetworkX (BSD-3), GeoPandas (BSD-3),
 rasterio (BSD-3), pysheds (GPL-3.0, used only in the offline prepare step), pyosmium and
 osmium-tool (BSD-2 / GPL-3.0, prepare step only), DuckDB (MIT), pytest (MIT), Vitest (MIT),

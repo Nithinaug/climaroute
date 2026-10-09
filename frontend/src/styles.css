@@ -1,85 +1,27 @@
-:root {
-  --teal: #0f766e;
-  --ink: #0f172a;
-  --muted: #475569;
-  --bg: #ffffff;
-  --line: #e2e8f0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: var(--ink);
-}
-* { box-sizing: border-box; }
-html, body, #root { margin: 0; height: 100%; }
-.app { position: relative; height: 100dvh; }
-.map { position: absolute; inset: 0; }
+@import "tailwindcss";
 
-.panel {
-  position: absolute; left: 0; right: 0; bottom: 0;
-  max-height: 55dvh; overflow-y: auto;
-  background: var(--bg); border-radius: 16px 16px 0 0;
-  box-shadow: 0 -4px 24px rgb(0 0 0 / 0.15);
-  padding: 14px 16px 20px; display: grid; gap: 10px;
-}
-@media (min-width: 768px) {
-  .panel { top: 16px; left: 16px; bottom: auto; right: auto; width: 360px;
-           max-height: calc(100dvh - 32px); border-radius: 16px; }
+/* Marigold for heat, monsoon slate for rain: the panel's top band takes the season's colour. */
+@theme {
+  --font-sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --color-ink: #18212b;
+  --color-muted: #5b6672;
+  --color-line: #e3e6ea;
+  --color-sun: #e9a11b;
+  --color-sun-deep: #5a3a00;
+  --color-sun-soft: #fdf3dc;
+  --color-rain: #2e5a78;
+  --color-rain-soft: #e6eef4;
+  --color-safe: #16a34a;
+  --color-risk: #dc2626;
+  --color-origin: #2563eb;
 }
 
-h1 { margin: 0; font-size: 1.3rem; color: var(--teal); }
-h2 { margin: 4px 0; font-size: 0.85rem; text-transform: uppercase; color: var(--muted); }
-.tagline { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+html, body, #root { height: 100%; }
+body { font-family: var(--font-sans); color: var(--color-ink); }
+:focus-visible { outline: 3px solid var(--color-sun); outline-offset: 2px; }
 
-.toggle { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.toggle legend { font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; width: 100%; }
-button {
-  font: inherit; cursor: pointer; border: 1px solid var(--line); background: #f8fafc;
-  border-radius: 999px; padding: 8px 12px; color: var(--ink); min-height: 40px;
-}
-button[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: #fff; }
-button:focus-visible, input:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
-button.link { border: 0; background: none; color: var(--teal); text-decoration: underline; padding: 4px; }
-
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-
-.hint { margin: 0; color: var(--muted); }
-.notice { margin: 0; color: #065f46; background: #ecfdf5; padding: 8px 10px; border-radius: 8px; }
-.error { margin: 0; color: #b91c1c; background: #fef2f2; padding: 8px 10px; border-radius: 8px; }
-.result { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
-.headline { margin: 0; font-weight: 700; font-size: 1.05rem; }
-.stat { display: grid; grid-template-columns: 22px auto; column-gap: 6px; font-size: 0.9rem; }
-.stat span:last-child { grid-column: 2; color: var(--muted); }
-.swatch { width: 18px; height: 6px; border-radius: 3px; margin-top: 7px; grid-row: span 2; }
-.swatch.safe { background: #16a34a; }
-.swatch.direct { background: #dc2626; }
-
-.fine { margin: 0; font-size: 0.75rem; color: var(--muted); }
-.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; }
-.dot.report { background: #f59e0b; border: 2px solid #78350f; }
-
-.search { position: relative; }
-.search label { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
-.search input { font: inherit; font-size: 1rem; color: inherit; padding: 8px 10px;
-  border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-.results { position: absolute; z-index: 2; left: 0; right: 0; margin: 4px 0 0; padding: 4px;
-  list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 8px;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.12); }
-.results button { width: 100%; text-align: left; border: 0; background: none; padding: 8px;
-  border-radius: 6px; }
-.results button:hover, .results button:focus-visible { background: #f1f5f9; }
-
-.city { display: grid; gap: 4px; font-size: 0.85rem; color: var(--muted); }
-.city select { font: inherit; font-size: 1rem; color: inherit; padding: 8px 10px;
-  border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-
-.simulate { display: flex; gap: 8px; align-items: center; font-size: 0.95rem; }
-
-/* Time input that looks like the City dropdown: "Now" when empty, arrow instead of clock
-   (the native clock icon is pushed outside the box and clipped). */
-.picker { position: relative; display: block; overflow: hidden; border: 1px solid var(--line);
-  border-radius: 8px; background: #fff; }
-.picker::after { content: ""; position: absolute; right: 12px; top: 50%; width: 8px; height: 8px;
-  border: solid currentColor; border-width: 0 2px 2px 0; transform: translateY(-70%) rotate(45deg);
-  pointer-events: none; color: var(--muted); }
-.picker input { font: inherit; font-size: 1rem; color: inherit; border: 0; background: none;
-  padding: 8px 10px; width: calc(100% + 40px); cursor: pointer; }
-.picker input.empty { color: transparent; }
-.picker .now { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+/* Loading text with a light sweeping across it. */
+.shiny { color: transparent; background: linear-gradient(100deg, var(--color-muted) 40%, var(--color-ink) 50%, var(--color-muted) 60%)
+  0 0 / 250% 100% text; animation: shine 1.6s linear infinite; }
+@keyframes shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@media (prefers-reduced-motion: reduce) { .shiny { animation: none; color: var(--color-muted); } }
