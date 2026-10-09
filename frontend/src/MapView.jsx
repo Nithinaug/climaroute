@@ -59,7 +59,7 @@ function addLayers(map) {
              "circle-stroke-color": "#fff" } });
 }
 
-export default function MapView({ area, origin, destination, result, mode, departure, onPick }) {
+export default function MapView({ area, origin, destination, result, loading, mode, departure, onPick }) {
   const container = useRef(null);
   const mapRef = useRef(null);
   const pickRef = useRef(onPick);
@@ -87,7 +87,6 @@ export default function MapView({ area, origin, destination, result, mode, depar
     map.on("click", (e) => pickRef.current({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
     mapRef.current = map;
     pinRef.current = new Marker({ color: COLORS.pin });
-    // Start: Google-style "trip origin" (bold ring, dot in the middle), white outline and shadow.
     const start = document.createElement("div");
     start.className = "start-marker";
     startRef.current = new Marker({ element: start });
@@ -130,9 +129,28 @@ export default function MapView({ area, origin, destination, result, mode, depar
     else startRef.current.remove();
     if (destination) pinRef.current.setLngLat([destination.lon, destination.lat]).addTo(map);
     else pinRef.current.remove();
+  }, [ready, origin, destination]);
+
+  // Route changes cross-fade: the old lines dim while a new route loads, then the new ones fade in
+  // (instead of popping in) when it arrives.
+  const ROUTE_LAYERS = ["cr-safe", "cr-direct"];
+  const fade = (map, opacity, duration) =>
+    ROUTE_LAYERS.forEach((id) => {
+      map.setPaintProperty(id, "line-opacity-transition", { duration, delay: 0 });
+      map.setPaintProperty(id, "line-opacity", opacity);
+    });
+  useEffect(() => {
+    if (ready && loading) fade(mapRef.current, 0.3, 250);
+  }, [ready, loading]);
+  useEffect(() => {
+    if (!ready) return;
+    const map = mapRef.current;
+    fade(map, 0, 0);
     map.getSource("cr-safe").setData(result?.safe_route ?? EMPTY);
     map.getSource("cr-direct").setData(result?.direct_route ?? EMPTY);
-  }, [ready, origin, destination, result]);
+    const id = requestAnimationFrame(() => fade(map, 1, 500));
+    return () => cancelAnimationFrame(id);
+  }, [ready, result]);
 
   // Zoom to a new trip so the two lines are big enough to tell apart. Only when the start or end
   // changed: a refreshed or re-moded route for the same trip leaves the view where the user put it.

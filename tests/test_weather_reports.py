@@ -78,3 +78,13 @@ def test_rain_at_a_later_departure_uses_the_forecast():
     assert weather.effective_rain(w, w.hours[1]) == 30.0
     later = weather.effective_rain(w, w.hours[3])  # 2 h after the downpour: mostly drained
     assert 0 < later < 30.0 * 0.5
+
+
+def test_uv_index_for_the_departure_hour():
+    import copy
+
+    payload = copy.deepcopy(SAMPLE)
+    payload["hourly"]["uv_index"] = [9.5, 10.2, 8.0, 5.1]
+    w = weather.parse(payload)
+    assert weather.uv_at(w, w.hours[1]) == 10.2
+    assert weather.uv_at(weather.parse(SAMPLE), w.hours[1]) is None

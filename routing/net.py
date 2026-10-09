@@ -72,7 +72,7 @@ class Net:
         """Streets passing within radius_m of a known flood spot (lat, lon) get terrain risk 1.0."""
         if not points or not len(self.terrain):
             return
-        # ponytail: checks street vertices only; a long straight segment past a spot can slip by.
+        # Checks street vertices only, so a long straight segment passing a spot can slip by.
         lon, lat = self.coords[:, 0], self.coords[:, 1]
         near = np.zeros(len(lat), dtype=bool)
         for plat, plon in points:  # plain distance test: no index to build, ~ms per spot

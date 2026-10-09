@@ -203,7 +203,7 @@ def route(req: RouteRequest):
 
     departure = req.departure_time or datetime.now(TZ)
     departure = departure.replace(tzinfo=TZ) if departure.tzinfo is None else departure
-    rain_mm, temperature, cloud, heat, soon, feels = 0.0, None, None, 1.0, None, None
+    rain_mm, temperature, cloud, heat, soon, feels, uv = 0.0, None, None, 1.0, None, None, None
     trip_a, trip_b = (req.origin.lat, req.origin.lon), (req.destination.lat, req.destination.lon)
     if req.mode == "monsoon" and req.simulate_rain_mm_per_hour is not None:
         rain_mm = req.simulate_rain_mm_per_hour
@@ -224,6 +224,7 @@ def route(req: RouteRequest):
             middle = weather.trip(weather.current(), trip_a, trip_b)[1]
             temperature, cloud = weather.at(middle, departure)
             feels = round(weather.feels_like(middle, departure), 1)
+            uv = weather.uv_at(middle, departure)
             heat = heat_factor(temperature, cloud)
         except weather.WeatherUnavailableError:
             log.warning("weather unavailable; using default heat factor")
@@ -253,14 +254,17 @@ def route(req: RouteRequest):
         "rain_mm_per_hour": rain_mm,
         "rain_simulated": req.mode == "monsoon" and req.simulate_rain_mm_per_hour is not None,
         # Heavier rain due in the next 2 h along the trip (already counted if within the hour).
-        "rain_soon": soon and {
+        "rain_soon": {
             "at": soon[0].strftime("%H:%M"),
             "mm_per_hour": round(soon[1], 1),
             "counted": soon[0] <= datetime.now(TZ) + timedelta(minutes=weather.SOON_MINUTES),
-        },
+        }
+        if soon
+        else None,
         "slot_time": departure.astimezone(TZ).strftime("%H:%M"),
         "temperature_c": temperature,
         "feels_like_c": feels,  # temperature with humidity, for heat warnings
+        "uv_index": uv,
         "cloud_cover_pct": cloud,
         "heat_factor": heat if req.mode == "summer" else None,
         "shade_date": graph(req.transport).meta.get("shade_date"),

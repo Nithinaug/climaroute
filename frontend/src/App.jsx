@@ -8,8 +8,8 @@ import RainOverlay from "./RainOverlay.jsx";
 const inArea = (area, p) =>
   area && p.lon >= area.bbox[0] && p.lat >= area.bbox[1] && p.lon <= area.bbox[2] && p.lat <= area.bbox[3];
 
-// Segmented switch; the selected pill slides between options. Plain CSS on purpose: Motion's
-// layoutId re-animated the pill whenever the panel above it changed height or scrolled.
+// Plain CSS slide on purpose: Motion's layoutId re-animated the pill whenever the panel above it
+// changed height or scrolled.
 function Toggle({ label, value, options, onChange, tone = "bg-white", text = "text-ink", track = "bg-black/5" }) {
   const i = options.findIndex(([v]) => v === value);
   return (
@@ -28,7 +28,6 @@ function Toggle({ label, value, options, onChange, tone = "bg-white", text = "te
   );
 }
 
-// Number that counts up to its new value.
 function Count({ value }) {
   const spring = useSpring(0, { stiffness: 90, damping: 18 });
   const shown = useTransform(spring, (n) => Math.round(n));
@@ -36,7 +35,6 @@ function Count({ value }) {
   return <motion.span>{shown}</motion.span>;
 }
 
-// Shade as a ring that fills to its percentage.
 function Ring({ pct, color }) {
   return (
     <span className="relative grid size-12 shrink-0 place-items-center">
@@ -51,7 +49,6 @@ function Ring({ pct, color }) {
   );
 }
 
-// Google's Material Symbols, loaded as a font in index.html.
 const Icon = ({ name, className = "" }) => (
   <span className={`material-symbols-rounded align-middle ${className}`} aria-hidden="true">{name}</span>
 );
@@ -61,17 +58,18 @@ const hhmm = (mins) => `${pad(Math.floor(mins / 60) % 24)}:${pad(mins % 60)}`;
 const minutesNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const sunIcon = (mins) => (mins < 360 || mins >= 1140 ? "dark_mode" : mins < 480 || mins >= 1020 ? "wb_twilight" : "light_mode");
 
-// "Leave now" pill with a small menu to type the time, applied with a button (or Enter) so
-// half-typed times don't re-route.
+// Applied with a button (or Enter) so half-typed times don't re-route.
 function TimeMenu({ time, onChange, children }) {
   const [open, setOpen] = useState(false);
   const [hh, setHh] = useState("");
   const [mm, setMm] = useState("");
   const minuteRef = useRef(null);
+  const hourRef = useRef(null);
   const box = useRef(null);
 
   useEffect(() => {
     if (!open) return;
+    hourRef.current.focus(); // not autoFocus: that fires before React's onFocus is listening
     box.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const outside = (e) => !box.current.contains(e.target) && setOpen(false);
     const esc = (e) => e.key === "Escape" && setOpen(false);
@@ -102,6 +100,24 @@ function TimeMenu({ time, onChange, children }) {
   const valid = hourOk && minuteOk;
   const value = valid ? `${pad(Number(hh))}:${pad(Number(mm))}` : "";
   // preventDefault: otherwise the same Enter also "clicks" the pill that gets focus, reopening the menu.
+  // A box that just got focus shows the cursor after its digits; the first digit typed replaces
+  // them (typing "16" over "12" gives 16), later ones add as usual.
+  const fresh = useRef(null);
+  const startFresh = (field) => (e) => {
+    fresh.current = field;
+    const end = e.target.value.length;
+    requestAnimationFrame(() => e.target.setSelectionRange(end, end));
+  };
+  const typeFresh = (field) => (e) => {
+    if (fresh.current === field && /^\d$/.test(e.key)) {
+      // Empty the box now; the browser then inserts the digit and onChange sees just that.
+      e.target.value = "";
+      fresh.current = null;
+      return;
+    }
+    if (e.key !== "Enter") fresh.current = null;
+    applyOnEnter(e);
+  };
   const applyOnEnter = (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
@@ -122,11 +138,10 @@ function TimeMenu({ time, onChange, children }) {
       {open && (
         <div role="dialog" aria-label="Departure time"
           className="mt-2 grid w-full gap-4 rounded-2xl border border-line bg-white p-4">
-          {/* Typed hours and minutes; two hour digits jump to the minutes, Enter applies. */}
           <div className="flex items-center gap-2 text-3xl font-extrabold tabular-nums">
             <Icon name={valid ? sunIcon(Number(hh) * 60 + Number(mm)) : "schedule"} className="text-sun" />
-            <input value={hh} inputMode="numeric" aria-label="Hour (0 to 23)" autoFocus
-              onFocus={(e) => e.target.select()} onKeyDown={applyOnEnter}
+            <input ref={hourRef} value={hh} inputMode="numeric" aria-label="Hour (0 to 23)"
+              onFocus={startFresh("hh")} onKeyDown={typeFresh("hh")}
               onChange={(e) => {
                 // Typing "2100" in one go: the first two digits are the hour, the rest the minutes.
                 const v = e.target.value.replace(/\D/g, "");
@@ -137,7 +152,7 @@ function TimeMenu({ time, onChange, children }) {
               className={`w-[2.6ch] rounded-lg border bg-white text-center ${hourOk ? "border-line" : "border-risk"}`} />
             :
             <input ref={minuteRef} value={mm} inputMode="numeric" maxLength={2} aria-label="Minute (0 to 59)"
-              onFocus={(e) => e.target.select()} onKeyDown={applyOnEnter}
+              onFocus={startFresh("mm")} onKeyDown={typeFresh("mm")}
               onChange={(e) => setMm(e.target.value.replace(/\D/g, ""))}
               className={`w-[2.6ch] rounded-lg border bg-white text-center ${minuteOk ? "border-line" : "border-risk"}`} />
           </div>
@@ -146,7 +161,6 @@ function TimeMenu({ time, onChange, children }) {
               className="min-h-10 flex-1 cursor-pointer rounded-full bg-sun font-semibold text-sun-deep disabled:cursor-default disabled:opacity-50">
               {valid ? `Leave at ${value}` : "Enter a time"}
             </button>
-            {/* The only way back to "now" once a time is set. */}
             {time && (
               <button type="button" onClick={() => apply("")}
                 className="min-h-10 cursor-pointer rounded-full border border-line px-4 font-semibold hover:bg-black/5">
@@ -160,8 +174,8 @@ function TimeMenu({ time, onChange, children }) {
   );
 }
 
-// A choice kept in this browser across reloads (the city is kept in the URL instead). Storage can
-// be blocked (private windows): then it's just a normal state.
+// Kept across reloads in this browser (the city lives in the URL). Storage can be blocked in
+// private windows; then it's plain state.
 function useRemembered(key, fallback, allowed) {
   const [value, setValue] = useState(() => {
     try {
@@ -194,24 +208,44 @@ const nameIt = (p, set, transport) =>
     .catch(() => true); // can't check: let the route request decide
 const NOT_NEAR_STREET = (end) => `${end} isn't near a street. Pick a point on or next to a road.`;
 const REFRESH_MS = 10 * 60 * 1000;
-// Feels-like (heat + humidity) thresholds: caution from 37°C, danger from 42°C.
+// Feels-like temperature (heat + humidity) thresholds, and the haze range (33-42°C).
 const HEAT_CAUTION_C = 37;
 const HEAT_DANGER_C = 42;
-// Heat haze: none at 33°C feels-like, full at 42°C.
 const hazeStrength = (feels) => (feels == null ? 0 : Math.min(1, Math.max(0, (feels - 33) / 9)));
 
-// "Feels like": temperature with humidity (apparent temperature); amber, red from 42°C.
-function HeatWarning({ feels, at }) {
-  const danger = feels >= HEAT_DANGER_C;
+// WHO UV index bands; warned about from "very high" (8).
+const UV_WARN = 8;
+const uvBand = (uv) => (uv >= 11 ? "extreme" : uv >= 8 ? "very high" : uv >= 6 ? "high" : uv >= 3 ? "moderate" : "low");
+const heatWarned = (c) => c?.feels_like_c >= HEAT_CAUTION_C || c?.uv_index >= UV_WARN;
+
+function HeatWarning({ feels, uv, at }) {
+  const danger = feels >= HEAT_DANGER_C || uv >= 11;
+  const hot = feels >= HEAT_CAUTION_C;
+  const strongSun = uv >= UV_WARN;
   return (
     <p className={`flex items-start gap-2 rounded-xl px-3 py-2 ${danger ? "bg-risk/10 text-red-800" : "bg-sun-soft text-sun-deep"}`}>
-      <Icon name="thermostat" className="mt-0.5" />
-      <span>Feels like <strong>{Math.round(feels)}°C</strong> at {at}.</span>
+      <Icon name={hot ? "thermostat" : "light_mode"} className="mt-0.5" />
+      <span>
+        {hot && <>Feels like <strong>{Math.round(feels)}°C</strong></>}
+        {hot && strongSun && " · "}
+        {strongSun && <>UV <strong>{Math.round(uv)}</strong> ({uvBand(uv)})</>} at {at}.
+      </span>
     </p>
   );
 }
 const SIMULATED_RAIN = 50; // mm/h: a heavy Indian monsoon downpour
 const slug = (name) => name.toLowerCase().split(",")[0].trim().replace(/\s+/g, "-");
+
+// A trip lives in the URL so it can be shared: #delhi?from=28.63,77.22&to=...&mode=monsoon&by=walk&at=16:00
+const readTrip = () => {
+  const [city, query = ""] = location.hash.slice(1).split("?");
+  return { city, q: new URLSearchParams(query) };
+};
+const toPoint = (v) => {
+  const [lat, lon] = (v ?? "").split(",").map(Number);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : null;
+};
+const fmtPoint = (p) => `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`;
 
 function PlaceSearch({ label, place, onSelect }) {
   const [text, setText] = useState("");
@@ -299,7 +333,6 @@ export default function App() {
 
   const chooseCity = useCallback((city) => {
     setCityApi(city.url);
-    history.replaceState(null, "", `#${slug(city.name)}`);
     setArea(city);
     setOrigin(null);
     setDestination(null);
@@ -313,7 +346,19 @@ export default function App() {
         const ok = found.filter(Boolean);
         if (!ok.length) throw new Error("Can't reach the server. Check your connection and try again.");
         setCities(ok);
-        chooseCity(ok.find((c) => `#${slug(c.name)}` === location.hash) ?? ok[0]);
+        const trip = readTrip();
+        const city = ok.find((c) => slug(c.name) === trip.city) ?? ok[0];
+        chooseCity(city);
+        // Opening a shared link: restore its trip (names are looked up again).
+        const by = trip.q.get("by");
+        const mode = trip.q.get("mode");
+        if (["summer", "monsoon"].includes(mode)) setMode(mode);
+        if (["walk", "two_wheeler"].includes(by)) setTransport(by);
+        if (/^\d{2}:\d{2}$/.test(trip.q.get("at") ?? "")) setTime(trip.q.get("at"));
+        const from = toPoint(trip.q.get("from"));
+        const to = toPoint(trip.q.get("to"));
+        if (from && inArea(city, from)) { setOrigin(from); nameIt(from, setOrigin, by ?? "walk"); }
+        if (to && inArea(city, to)) { setDestination(to); nameIt(to, setDestination, by ?? "walk"); }
       })
       .catch((e) => setError(e.message));
   }, [chooseCity]);
@@ -375,6 +420,29 @@ export default function App() {
     };
   // Coordinates, not objects: adding a place name to a point must not re-route.
   }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, simulateRain, refresh]);
+
+  // Keep the URL in step with the trip, so the address bar is always a shareable link.
+  useEffect(() => {
+    if (!area) return;
+    const parts = [];
+    if (origin) parts.push(`from=${fmtPoint(origin)}`);
+    if (destination) parts.push(`to=${fmtPoint(destination)}`);
+    if (parts.length) parts.push(`mode=${mode}`, `by=${transport}`, ...(time ? [`at=${time}`] : []));
+    history.replaceState(null, "", `#${slug(area.name)}${parts.length ? `?${parts.join("&")}` : ""}`);
+  }, [area, origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time]);
+
+  const [copied, setCopied] = useState(false);
+  const shareRoute = async () => {
+    const url = location.href;
+    try {
+      if (navigator.share) return await navigator.share({ title: "ClimaRoute", url });
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // share sheet dismissed, or clipboard blocked: the address bar still has the link
+    }
+  };
 
   // The city's temperature: now, or the forecast for the chosen departure time. Loaded on choosing
   // a city or a time, then every 10 minutes while the tab is visible.
@@ -451,7 +519,6 @@ export default function App() {
       : null;
 
   const summer = mode === "summer";
-  // Temperature in the city now, or forecast for the departure time when one is set.
   const tempChip = nowWeather?.temperature_c != null && (
     <span className="inline-flex items-center gap-1 rounded-full px-2 text-sm font-semibold text-muted"
       title={time ? `Forecast for ${time} in ${area?.name}` : `Temperature in ${area?.name} now`}>
@@ -479,10 +546,10 @@ export default function App() {
         result={same ? { ...result, direct_route: null } : result}
         mode={mode}
         departure={time}
+        loading={loading}
         onPick={pick}
       />
-      {/* Summer: a warm glow at the map's edges when it feels hot (the city now, or at the
-          chosen departure time), with or without a route. */}
+      {/* Follows the temperature chip, so it shows before any route is made. */}
       <div aria-hidden="true" className="heat-haze pointer-events-none absolute inset-0"
         style={{ opacity: summer ? hazeStrength(nowWeather?.feels_like_c ?? result?.conditions?.feels_like_c) : 0 }} />
       {/* Simulated rain shows at once; otherwise the live rain the last route was planned for. */}
@@ -498,7 +565,6 @@ export default function App() {
         </header>
 
         <div className="grid gap-3 p-4">
-          {/* City and how you're travelling share a row. */}
           <div className="flex items-end gap-2">
             {cities.length > 1 && (
               <label className="grid min-w-0 flex-1 gap-0.5 text-xs text-muted">
@@ -517,9 +583,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* From and To joined like the two ends of a trip on the map. */}
           <div className="grid grid-cols-[14px_1fr_auto] gap-x-3">
-            {/* Start: hollow circle; end: red pin (same marks as on the map), dots between. */}
             <div className="flex flex-col items-center pt-[12px] pb-[11px]" aria-hidden="true">
               <Icon name="trip_origin" className="!text-[18px] leading-none text-ink" />
               <span className="flex flex-1 flex-col items-center justify-evenly">
@@ -535,7 +599,6 @@ export default function App() {
               <PlaceSearch label="To" place={destination}
                 onSelect={(p) => { setError(null); setResult(null); setDestination(p); }} />
             </div>
-            {/* Beside the From box: use my location. Beside the To box: swap the two. */}
             <div className="flex flex-col gap-[14px] pt-px">
               <button type="button" aria-label="Use my location" title="Use my location" onClick={useMyLocation}
                 className="grid size-10 cursor-pointer place-items-center rounded-full text-origin hover:bg-black/5">
@@ -567,8 +630,9 @@ export default function App() {
             {result && (
               <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: loading ? 0.45 : 1, y: 0 }}
                 aria-busy={loading} className="grid gap-3 rounded-2xl border border-line p-4">
-                {summer && result.conditions?.feels_like_c >= HEAT_CAUTION_C && (
-                  <HeatWarning feels={result.conditions.feels_like_c} at={result.conditions.slot_time} />
+                {summer && heatWarned(result.conditions) && (
+                  <HeatWarning feels={result.conditions.feels_like_c} uv={result.conditions.uv_index}
+                    at={result.conditions.slot_time} />
                 )}
                 {!summer && result.conditions?.rain_soon && (
                   <p className="flex items-start gap-2 rounded-xl bg-rain-soft px-3 py-2 text-rain">
@@ -585,11 +649,17 @@ export default function App() {
                 <p className="text-lg font-extrabold leading-snug">{comparison(result.stats, mode)}</p>
                 <Stats title="Safe route" s={result.stats.safe} mode={mode} color="var(--color-safe)" />
                 {!same && <Stats title="Direct route" s={result.stats.direct} mode={mode} color="var(--color-risk)" />}
-                {/* Simulated rain is the same at every hour, so there's no best time to find. */}
-                {!best && !(simulateRain && !summer) && (
-                  <button type="button" className={`${linkBtn} justify-self-start ${summer ? "text-sun-deep" : "text-rain"}`}
-                    onClick={findBestTime}>Best time to leave?</button>
-                )}
+                <div className="flex items-center gap-2">
+                  {/* Simulated rain is the same at every hour, so there's no best time to find. */}
+                  {!best && !(simulateRain && !summer) && (
+                    <button type="button" className={`${linkBtn} ${summer ? "text-sun-deep" : "text-rain"}`}
+                      onClick={findBestTime}>Best time to leave?</button>
+                  )}
+                  <button type="button" onClick={shareRoute}
+                    className="ml-auto inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-full px-3 font-semibold text-muted hover:bg-black/5">
+                    <Icon name="share" className="!text-[18px]" /> {copied ? "Link copied" : "Share"}
+                  </button>
+                </div>
                 {best && (
                   <p className={`rounded-xl px-3 py-2 ${summer ? "bg-sun-soft text-sun-deep" : "bg-rain-soft text-rain"}`}>
                     Best in the next 3 h: leave at <strong>{best.best.time}</strong>{" "}

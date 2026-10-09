@@ -204,7 +204,6 @@ def test_points_away_from_streets_are_flagged(monkeypatch):
     assert client.get("/place", params=INSIDE_A).json()["near_street"] is True
 
 
-
 def test_now_reports_current_weather_or_the_forecast_for_a_time():
     assert client.get("/now").json() == {
         "temperature_c": 33.0,

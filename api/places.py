@@ -55,7 +55,7 @@ def search(text: str, limit: int = 5) -> list[dict]:
         items = _client().search_text(
             QueryText=text,
             Filter={"BoundingBox": list(area.BBOX)},
-            MaxResults=limit,
+            MaxResults=10,
             Language="en",
         )["ResultItems"]
     except Exception as e:  # noqa: BLE001 - no boto3 locally, AWS errors when deployed

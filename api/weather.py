@@ -47,9 +47,9 @@ OPEN_METEO_URL = (
     f"?latitude={','.join(str(p[0]) for p in POINTS)}"
     f"&longitude={','.join(str(p[1]) for p in POINTS)}"
     "&current=precipitation,temperature_2m,cloud_cover,apparent_temperature"
-    "&hourly=precipitation,temperature_2m,cloud_cover,apparent_temperature"
-    # ponytail: outside Europe/North America Open-Meteo's 15-min values are interpolated from
-    # hourly models, so timing is approximate; a radar nowcast would be the upgrade.
+    "&hourly=precipitation,temperature_2m,cloud_cover,apparent_temperature,uv_index"
+    # Outside Europe/North America the 15-min values are interpolated from hourly models, so
+    # storm timing is approximate; a radar nowcast would be better.
     "&minutely_15=precipitation&forecast_minutely_15=8"
     "&past_hours=6&forecast_hours=24&timezone=Asia%2FKolkata"
 )
@@ -75,6 +75,7 @@ class Weather:
     cloud_cover_pct: list[float]
     soon: tuple[tuple[datetime, float], ...] = ()  # (15-min slot start, mm/hour), next 2 h
     feels_like_c: tuple[float, ...] = ()  # hourly "apparent" temperature (heat + humidity)
+    uv_index: tuple[float, ...] = ()  # hourly UV index (WHO scale)
     temp_now: float | None = None  # current reading (the hourly lists are forecasts)
     feels_now: float | None = None
 
@@ -94,6 +95,7 @@ def parse(payload: dict, point: tuple[float, float] | None = None) -> Weather:
         temperature_c=[float(v) for v in h["temperature_2m"]],
         cloud_cover_pct=[float(v) for v in h["cloud_cover"]],
         feels_like_c=tuple(float(v) for v in h.get("apparent_temperature", h["temperature_2m"])),
+        uv_index=tuple(float(v or 0) for v in h.get("uv_index", [])),
         soon=tuple(
             (datetime.fromisoformat(t).replace(tzinfo=TZ), float(v or 0) * 4)  # mm/15 min -> mm/h
             for t, v in zip(m.get("time", []), m.get("precipitation", []), strict=True)
@@ -158,6 +160,11 @@ def at(w: Weather, when: datetime) -> tuple[float, float]:
     """(temperature_c, cloud_cover_pct) for the forecast hour nearest to `when`."""
     i = _hour(w, when)
     return w.temperature_c[i], w.cloud_cover_pct[i]
+
+
+def uv_at(w: Weather, when: datetime) -> float | None:
+    """UV index in the forecast hour nearest to `when` (None if not in the forecast)."""
+    return w.uv_index[_hour(w, when)] if w.uv_index else None
 
 
 def feels_like(w: Weather, when: datetime) -> float:

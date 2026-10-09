@@ -153,4 +153,3 @@ def test_mark_flood_spots_sets_nearby_streets_to_full_risk():
     net.mark_flood_spots([(lat, lon)], radius_m=5)
     assert net.terrain[0] == 1.0 and net.terrain.sum() < len(net.terrain)
     net.mark_flood_spots([], radius_m=5)  # no spots: no error
-

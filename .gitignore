@@ -27,7 +27,6 @@ cache/
 # Editors, OS, local tooling
 .vscode/
 .idea/
-.claude/
 .DS_Store
 *.log
 *.swp
