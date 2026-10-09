@@ -18,7 +18,15 @@ from mangum import Mangum
 from pydantic import BaseModel, Field
 
 from api import places, reports, weather
-from routing import NoRouteError, OutOfAreaError, find_routes, heat_factor, nearest_edge
+from routing import (
+    NoRouteError,
+    NotNearStreetError,
+    OutOfAreaError,
+    find_routes,
+    heat_factor,
+    near_street,
+    nearest_edge,
+)
 from routing.net import Net
 from shared import area
 from shared.storage import read_bytes
@@ -135,6 +143,22 @@ def get_area():
     }
 
 
+@app.get("/now")
+def now():
+    """Weather right now at the city centre, for the panel's temperature chip."""
+    try:
+        w = weather.nearest(weather.current(), area.CENTER["lat"], area.CENTER["lon"])
+    except weather.WeatherUnavailableError:
+        raise ApiError(
+            503, "WEATHER_UNAVAILABLE", "Live weather is unavailable right now."
+        ) from None
+    return {
+        "temperature_c": w.temp_now,
+        "feels_like_c": w.feels_now,
+        "rain_mm_per_hour": round(w.rain_now, 1),
+    }
+
+
 @app.get("/search")
 def search(q: str = Query(min_length=2, max_length=100)):
     try:
@@ -146,13 +170,18 @@ def search(q: str = Query(min_length=2, max_length=100)):
 
 
 @app.get("/place")
-def place(lat: float = Query(ge=-90, le=90), lon: float = Query(ge=-180, le=180)):
+def place(
+    lat: float = Query(ge=-90, le=90),
+    lon: float = Query(ge=-180, le=180),
+    transport: Literal["walk", "two_wheeler"] = "walk",
+):
+    """Street name for a tapped point, and whether a route can start or end there."""
+    near = area.contains(lat, lon) and near_street(graph(transport), lat, lon)
     try:
-        return {"name": places.name_at(round(lat, 4), round(lon, 4))}
+        name = places.name_at(round(lat, 4), round(lon, 4))
     except places.SearchUnavailableError:
-        raise ApiError(
-            503, "SEARCH_UNAVAILABLE", "Place names aren't available right now."
-        ) from None
+        name = None  # the street check still matters without a name
+    return {"name": name, "near_street": near}
 
 
 @app.post("/route")
@@ -166,7 +195,7 @@ def route(req: RouteRequest):
 
     departure = req.departure_time or datetime.now(TZ)
     departure = departure.replace(tzinfo=TZ) if departure.tzinfo is None else departure
-    rain_mm, temperature, cloud, heat, soon = 0.0, None, None, 1.0, None
+    rain_mm, temperature, cloud, heat, soon, feels = 0.0, None, None, 1.0, None, None
     trip_a, trip_b = (req.origin.lat, req.origin.lon), (req.destination.lat, req.destination.lon)
     if req.mode == "monsoon" and req.simulate_rain_mm_per_hour is not None:
         rain_mm = req.simulate_rain_mm_per_hour
@@ -180,9 +209,9 @@ def route(req: RouteRequest):
             ) from None
     else:
         try:
-            temperature, cloud = weather.at(
-                weather.trip(weather.current(), trip_a, trip_b)[1], departure
-            )
+            middle = weather.trip(weather.current(), trip_a, trip_b)[1]
+            temperature, cloud = weather.at(middle, departure)
+            feels = round(weather.feels_like(middle, departure), 1)
             heat = heat_factor(temperature, cloud)
         except weather.WeatherUnavailableError:
             log.warning("weather unavailable; using default heat factor")
@@ -200,6 +229,8 @@ def route(req: RouteRequest):
             heat_factor=heat,
             reports=reports.strengths(active_reports),
         )
+    except NotNearStreetError as e:
+        raise ApiError(422, f"{e.end.upper()}_NOT_NEAR_STREET", str(e)) from None
     except OutOfAreaError as e:
         raise ApiError(422, "OUT_OF_AREA", str(e)) from None
     except NoRouteError as e:
@@ -217,6 +248,7 @@ def route(req: RouteRequest):
         },
         "slot_time": departure.astimezone(TZ).strftime("%H:%M"),
         "temperature_c": temperature,
+        "feels_like_c": feels,  # temperature with humidity, for heat warnings
         "cloud_cover_pct": cloud,
         "heat_factor": heat if req.mode == "summer" else None,
         "shade_date": graph(req.transport).meta.get("shade_date"),

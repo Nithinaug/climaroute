@@ -46,8 +46,8 @@ OPEN_METEO_URL = (
     "https://api.open-meteo.com/v1/forecast"
     f"?latitude={','.join(str(p[0]) for p in POINTS)}"
     f"&longitude={','.join(str(p[1]) for p in POINTS)}"
-    "&current=precipitation,temperature_2m,cloud_cover"
-    "&hourly=precipitation,temperature_2m,cloud_cover"
+    "&current=precipitation,temperature_2m,cloud_cover,apparent_temperature"
+    "&hourly=precipitation,temperature_2m,cloud_cover,apparent_temperature"
     # ponytail: outside Europe/North America Open-Meteo's 15-min values are interpolated from
     # hourly models, so timing is approximate; a radar nowcast would be the upgrade.
     "&minutely_15=precipitation&forecast_minutely_15=8"
@@ -74,6 +74,9 @@ class Weather:
     temperature_c: list[float]
     cloud_cover_pct: list[float]
     soon: tuple[tuple[datetime, float], ...] = ()  # (15-min slot start, mm/hour), next 2 h
+    feels_like_c: tuple[float, ...] = ()  # hourly "apparent" temperature (heat + humidity)
+    temp_now: float | None = None  # current reading (the hourly lists are forecasts)
+    feels_now: float | None = None
 
 
 def parse(payload: dict, point: tuple[float, float] | None = None) -> Weather:
@@ -84,10 +87,13 @@ def parse(payload: dict, point: tuple[float, float] | None = None) -> Weather:
         lon=lon,
         now=datetime.fromisoformat(cur["time"]).replace(tzinfo=TZ),
         rain_now=float(cur["precipitation"]) * 3600 / cur.get("interval", 3600),
+        temp_now=cur.get("temperature_2m"),
+        feels_now=cur.get("apparent_temperature", cur.get("temperature_2m")),
         hours=[datetime.fromisoformat(t).replace(tzinfo=TZ) for t in h["time"]],
         rain=[float(v or 0) for v in h["precipitation"]],
         temperature_c=[float(v) for v in h["temperature_2m"]],
         cloud_cover_pct=[float(v) for v in h["cloud_cover"]],
+        feels_like_c=tuple(float(v) for v in h.get("apparent_temperature", h["temperature_2m"])),
         soon=tuple(
             (datetime.fromisoformat(t).replace(tzinfo=TZ), float(v or 0) * 4)  # mm/15 min -> mm/h
             for t, v in zip(m.get("time", []), m.get("precipitation", []), strict=True)
@@ -140,10 +146,20 @@ def rain_soon(w: Weather) -> tuple[datetime, float] | None:
     return hits[0] if hits else None
 
 
+def _hour(w: Weather, when: datetime) -> int:
+    return min(range(len(w.hours)), key=lambda k: abs((w.hours[k] - when).total_seconds()))
+
+
 def at(w: Weather, when: datetime) -> tuple[float, float]:
     """(temperature_c, cloud_cover_pct) for the forecast hour nearest to `when`."""
-    i = min(range(len(w.hours)), key=lambda k: abs((w.hours[k] - when).total_seconds()))
+    i = _hour(w, when)
     return w.temperature_c[i], w.cloud_cover_pct[i]
+
+
+def feels_like(w: Weather, when: datetime) -> float:
+    """How hot it feels (temperature with humidity) in the forecast hour nearest to `when`."""
+    i = _hour(w, when)
+    return (w.feels_like_c or w.temperature_c)[i]
 
 
 def nearest(ws: list[Weather], lat: float, lon: float) -> Weather:

@@ -165,7 +165,8 @@ def test_place_name(monkeypatch):
     main.places.name_at.cache_clear()
     monkeypatch.setattr(main.places, "_client", lambda: Fake())
     r = client.get("/place", params={"lat": 12.97841, "lon": 77.64079})
-    assert r.json() == {"name": "100 Feet Rd, Indiranagar"}
+    assert r.json()["name"] == "100 Feet Rd, Indiranagar"
+    assert set(r.json()) == {"name", "near_street"}
 
 
 def test_monsoon_simulated_rain_overrides_live():
@@ -188,3 +189,25 @@ def test_best_time_lists_next_three_hours():
     times = [o["time"] for o in body["options"]]
     assert times[0] == "15:00" and times[-1] == "18:00" and len(times) == 7
     assert body["best"] in body["options"]
+
+
+def test_points_away_from_streets_are_flagged(monkeypatch):
+    far = {"lat": 12.944, "lon": 77.613}  # inside the area, nowhere near the dummy streets
+    r = _route(destination=far)
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "DESTINATION_NOT_NEAR_STREET"
+    assert _route(origin=far).json()["error"]["code"] == "START_NOT_NEAR_STREET"
+    main.places.name_at.cache_clear()
+    # Names unavailable: the street check still answers.
+    monkeypatch.setattr(main.places, "_client", lambda: 1 / 0)
+    assert client.get("/place", params=far).json() == {"name": None, "near_street": False}
+    assert client.get("/place", params=INSIDE_A).json()["near_street"] is True
+
+
+
+def test_now_reports_current_weather():
+    assert client.get("/now").json() == {
+        "temperature_c": 33.0,
+        "feels_like_c": 33.0,
+        "rain_mm_per_hour": 0.0,
+    }

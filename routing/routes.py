@@ -12,18 +12,25 @@ from scipy.sparse.csgraph import dijkstra
 
 from monsoon.rain import rain_factor
 from routing import config
-from routing.errors import NoRouteError, OutOfAreaError
+from routing.errors import NoRouteError, NotNearStreetError, OutOfAreaError
 from routing.net import M_PER_DEG_LAT, Net
 from shared.area import TIMEZONE
 
 BLOCKED = 1e9  # cost of an unusable edge; a path costing this much counts as no route
 
 
+def near_street(net: Net, lat: float, lon: float) -> bool:
+    """Whether a route can start or end here (not in a lake, park or field)."""
+    return net.kdtree.query((lon * net.kx, lat * M_PER_DEG_LAT))[0] <= config.SNAP_MAX_M
+
+
 def _nearest_node(net: Net, lat: float, lon: float, label: str) -> int:
     dist, i = net.kdtree.query((lon * net.kx, lat * M_PER_DEG_LAT))
     if dist > config.SNAP_MAX_M:
         # Inside the city but nowhere near a street (a lake, park or field).
-        raise OutOfAreaError(f"{label} isn't near a street. Pick a point on or next to a road.")
+        raise NotNearStreetError(
+            label.lower(), f"{label} isn't near a street. Pick a point on or next to a road."
+        )
     return int(i)
 
 

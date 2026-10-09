@@ -1,6 +1,8 @@
 import { Map as MapLibreMap, Marker, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { useEffect, useRef, useState } from "react";
+import { todayAt } from "./format.js";
+import { applyNight, nightness, sunElevation } from "./nightMap.js";
 
 // Let Vite bundle MapLibre's worker; its default path doesn't survive bundling.
 setWorkerUrl(workerUrl);
@@ -45,11 +47,9 @@ function prefetchTiles(map, [w, s, e, n], zoom) {
 }
 
 function addLayers(map) {
-  for (const id of ["direct", "safe", "points", "water", "flood"].map((n) => `cr-${n}`)) {
+  for (const id of ["direct", "safe", "points", "water"].map((n) => `cr-${n}`)) {
     map.addSource(id, { type: "geojson", data: EMPTY });
   }
-  map.addLayer({ id: "cr-flood", type: "circle", source: "cr-flood",
-    paint: { "circle-radius": 14, "circle-color": "#3b82f6", "circle-opacity": 0.35 } });
   map.addLayer({ id: "cr-direct", type: "line", source: "cr-direct",
     layout: { "line-cap": "round" },
     // Under the wider green line: shared streets show green, red only where the direct route differs.
@@ -66,7 +66,7 @@ function addLayers(map) {
              "circle-stroke-color": COLORS.destination } });
 }
 
-export default function MapView({ area, origin, destination, result, mode, onPick }) {
+export default function MapView({ area, origin, destination, result, mode, departure, onPick }) {
   const container = useRef(null);
   const mapRef = useRef(null);
   const pickRef = useRef(onPick);
@@ -100,7 +100,6 @@ export default function MapView({ area, origin, destination, result, mode, onPic
     if (!ready || !area) return;
     const map = mapRef.current;
     map.getSource("cr-water").setData(area.water_points ?? EMPTY);
-    map.getSource("cr-flood").setData(area.flood_spots ?? EMPTY);
     // Only the city is ever on screen: the view can't show (or be clicked) outside its box.
     map.setMaxBounds(null);
     map.setMinZoom(null);
@@ -124,7 +123,6 @@ export default function MapView({ area, origin, destination, result, mode, onPic
     if (!ready) return;
     const map = mapRef.current;
     map.setLayoutProperty("cr-water", "visibility", mode === "summer" ? "visible" : "none");
-    map.setLayoutProperty("cr-flood", "visibility", mode === "monsoon" ? "visible" : "none");
   }, [ready, mode]);
 
   useEffect(() => {
@@ -137,9 +135,14 @@ export default function MapView({ area, origin, destination, result, mode, onPic
     map.getSource("cr-direct").setData(result?.direct_route ?? EMPTY);
   }, [ready, origin, destination, result]);
 
-  // Zoom to a new route so the two lines are big enough to tell apart.
+  // Zoom to a new trip so the two lines are big enough to tell apart. Only when the start or end
+  // changed: a refreshed or re-moded route for the same trip leaves the view where the user put it.
+  const fittedTrip = useRef("");
   useEffect(() => {
-    if (!ready || !result) return;
+    if (!ready || !result || !origin || !destination) return;
+    const trip = [origin.lat, origin.lon, destination.lat, destination.lon].join();
+    if (trip === fittedTrip.current) return;
+    fittedTrip.current = trip;
     const xs = [], ys = [];
     const walk = (c) => (typeof c[0] === "number" ? (xs.push(c[0]), ys.push(c[1])) : c.forEach(walk));
     for (const r of [result.safe_route, result.direct_route]) {
@@ -156,10 +159,28 @@ export default function MapView({ area, origin, destination, result, mode, onPic
     );
   }, [ready, result]);
 
+  // Day, dusk or night map for the departure time ("" = now; rechecked every 5 minutes).
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setClock(Date.now()), 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+  const lastNight = useRef(null);
+  useEffect(() => {
+    if (!ready || !area) return;
+    const when = departure ? new Date(todayAt(departure)) : new Date(clock);
+    // Rounded so tiny sun moves don't restyle the map every few minutes.
+    const t = Math.round(nightness(sunElevation(when, area.center.lat, area.center.lon)) * 10) / 10;
+    if (t === lastNight.current) return;
+    applyNight(mapRef.current, t, lastNight.current === null ? 0 : 1500);
+    lastNight.current = t;
+  }, [ready, area, departure, clock]);
+
   // Cleared (no start or end): zoom back out from the last route to the whole city.
   useEffect(() => {
     if (!ready || !area || origin || destination || !zoomedToRoute.current) return;
     zoomedToRoute.current = false;
+    fittedTrip.current = "";
     mapRef.current.easeTo({ ...lockedCamera(mapRef.current, area.bbox), duration: 800 });
   }, [ready, area, origin, destination]);
 

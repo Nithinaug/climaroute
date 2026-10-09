@@ -61,3 +61,13 @@ def test_rain_due_soon_counts_and_warns():
     assert weather.rain_soon(replace(dry, soon=(at(30, 1.0),))) is None  # drizzle
     here = (dry.lat, dry.lon)
     assert weather.trip_rain_soon([dry, storm_in_90, storm_in_45], here, here) == at(45, 20.0)
+
+
+def test_feels_like_uses_apparent_temperature_when_given():
+    import copy
+
+    payload = copy.deepcopy(SAMPLE)
+    payload["hourly"]["apparent_temperature"] = [38.0, 41.5, 42.0, 36.0]
+    w = weather.parse(payload)
+    assert weather.feels_like(w, w.hours[1]) == 41.5
+    assert weather.feels_like(weather.parse(SAMPLE), w.hours[1]) == 33.0  # falls back to air temp

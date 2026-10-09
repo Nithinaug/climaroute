@@ -284,7 +284,7 @@ Built:
 - Summer: "Best time to leave?" (next 3 h) with "Use this time".
 - Use my location and Clear below the results. (Flood reporting was removed
   from the app; the API endpoints remain.)
-- Summer: drinking-water points at street zoom. Monsoon: known flood spots layer.
+- Summer: drinking-water points at street zoom. Known flood spots aren't drawn; routes avoid them.
 - Clear states: loading, no route, API error, rain unavailable.
 - Mobile layout (bottom sheet); keyboard-reachable controls with labels.
 
@@ -746,6 +746,7 @@ Every non-200 response uses one shape:
 |------|----------------|------|
 | 422  | `INVALID_REQUEST` | bad/missing fields |
 | 422  | `OUT_OF_AREA`  | `OutOfAreaError` |
+| 422  | `START_NOT_NEAR_STREET` / `DESTINATION_NOT_NEAR_STREET` | `NotNearStreetError`: inside the area but > 200 m from a street |
 | 422  | `NO_ROUTE`     | `NoRouteError` |
 | 429  | `THROTTLED`    | API Gateway throttling |
 | 500  | `INTERNAL`     | anything else (details only in logs) |

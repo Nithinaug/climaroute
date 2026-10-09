@@ -10,6 +10,7 @@ Safer routes through Indian cities in extreme weather, for people walking or on 
 
 Every answer shows the safe route next to the direct route, so you can see what the detour buys you
 (e.g. "34% shaded vs 4%", "0 flood-prone streets vs 3").
+In the monsoon, rain falls over the map as heavily as the rain the route was planned for.
 
 Live for five cities:
 
