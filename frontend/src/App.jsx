@@ -481,9 +481,10 @@ export default function App() {
         departure={time}
         onPick={pick}
       />
-      {/* Summer: a warm glow at the map's edges when the trip will feel hot. */}
+      {/* Summer: a warm glow at the map's edges when it feels hot (the city now, or at the
+          chosen departure time), with or without a route. */}
       <div aria-hidden="true" className="heat-haze pointer-events-none absolute inset-0"
-        style={{ opacity: summer ? hazeStrength(result?.conditions?.feels_like_c) : 0 }} />
+        style={{ opacity: summer ? hazeStrength(nowWeather?.feels_like_c ?? result?.conditions?.feels_like_c) : 0 }} />
       {/* Simulated rain shows at once; otherwise the live rain the last route was planned for. */}
       <RainOverlay mmPerHour={summer ? 0 : simulateRain ? SIMULATED_RAIN : (result?.conditions?.rain_mm_per_hour ?? 0)} />
       <aside aria-label="Route options"
@@ -519,8 +520,8 @@ export default function App() {
           {/* From and To joined like the two ends of a trip on the map. */}
           <div className="grid grid-cols-[14px_1fr_auto] gap-x-3">
             {/* Start: hollow circle; end: red pin (same marks as on the map), dots between. */}
-            <div className="flex flex-col items-center pt-[15px] pb-[11px]" aria-hidden="true">
-              <span className="size-3 rounded-full border-2 border-ink bg-white" />
+            <div className="flex flex-col items-center pt-[12px] pb-[11px]" aria-hidden="true">
+              <Icon name="trip_origin" className="!text-[18px] leading-none text-ink" />
               <span className="flex flex-1 flex-col items-center justify-evenly">
                 <span className="size-1 rounded-full bg-muted" />
                 <span className="size-1 rounded-full bg-muted" />

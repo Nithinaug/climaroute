@@ -12,9 +12,6 @@ const STYLE_URL =
 const EMPTY = { type: "FeatureCollection", features: [] };
 const COLORS = { safe: "#16a34a", direct: "#dc2626", destination: "#1f2937", pin: "#dc2626" };
 
-const point = (p, role) =>
-  p && { type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] }, properties: { role } };
-
 const merc = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
 
 // The view maxBounds settles on: the whole map canvas inside the city's box. Landing exactly here
@@ -47,7 +44,7 @@ function prefetchTiles(map, [w, s, e, n], zoom) {
 }
 
 function addLayers(map) {
-  for (const id of ["direct", "safe", "points", "water"].map((n) => `cr-${n}`)) {
+  for (const id of ["direct", "safe", "water"].map((n) => `cr-${n}`)) {
     map.addSource(id, { type: "geojson", data: EMPTY });
   }
   map.addLayer({ id: "cr-direct", type: "line", source: "cr-direct",
@@ -60,10 +57,6 @@ function addLayers(map) {
   map.addLayer({ id: "cr-water", type: "circle", source: "cr-water", minzoom: 14,
     paint: { "circle-radius": 5, "circle-color": "#0ea5e9", "circle-stroke-width": 1.5,
              "circle-stroke-color": "#fff" } });
-  // Start: hollow circle (the destination is a pin marker, see MapView).
-  map.addLayer({ id: "cr-points", type: "circle", source: "cr-points",
-    paint: { "circle-radius": 7, "circle-color": "#fff", "circle-stroke-width": 3,
-             "circle-stroke-color": COLORS.destination } });
 }
 
 export default function MapView({ area, origin, destination, result, mode, departure, onPick }) {
@@ -73,6 +66,7 @@ export default function MapView({ area, origin, destination, result, mode, depar
   const shownRef = useRef(null);
   const zoomedToRoute = useRef(false);
   const pinRef = useRef(null);
+  const startRef = useRef(null);
   const [ready, setReady] = useState(false);
   pickRef.current = onPick;
 
@@ -93,6 +87,10 @@ export default function MapView({ area, origin, destination, result, mode, depar
     map.on("click", (e) => pickRef.current({ lat: e.lngLat.lat, lon: e.lngLat.lng }));
     mapRef.current = map;
     pinRef.current = new Marker({ color: COLORS.pin });
+    // Start: Google-style "trip origin" (bold ring, dot in the middle), white outline and shadow.
+    const start = document.createElement("div");
+    start.className = "start-marker";
+    startRef.current = new Marker({ element: start });
     return () => map.remove();
   }, []);
 
@@ -128,7 +126,8 @@ export default function MapView({ area, origin, destination, result, mode, depar
   useEffect(() => {
     if (!ready) return;
     const map = mapRef.current;
-    map.getSource("cr-points").setData({ type: "FeatureCollection", features: [point(origin, "origin")].filter(Boolean) });
+    if (origin) startRef.current.setLngLat([origin.lon, origin.lat]).addTo(map);
+    else startRef.current.remove();
     if (destination) pinRef.current.setLngLat([destination.lon, destination.lat]).addTo(map);
     else pinRef.current.remove();
     map.getSource("cr-safe").setData(result?.safe_route ?? EMPTY);

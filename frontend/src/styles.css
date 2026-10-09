@@ -20,6 +20,13 @@ html, body, #root { height: 100%; }
 body { font-family: var(--font-sans); color: var(--color-ink); }
 :focus-visible { outline: 3px solid var(--color-sun); outline-offset: 2px; }
 
+/* Start of a trip on the map: dark ring with a dot in the middle (like the panel's icon). */
+.start-marker {
+  width: 22px; height: 22px; border-radius: 50%; cursor: default;
+  background: radial-gradient(circle, var(--color-ink) 0 3px, #fff 3.5px 5.5px, var(--color-ink) 6px);
+  border: 2.5px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
+}
+
 /* Summer heat haze: warm glow at the map's edges (strength set inline), slowly breathing. */
 .heat-haze { transition: opacity 1.5s ease; }
 .heat-haze::after {
