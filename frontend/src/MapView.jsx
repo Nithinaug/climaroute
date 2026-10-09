@@ -7,6 +7,7 @@ setWorkerUrl(workerUrl);
 
 const STYLE_URL =
   import.meta.env.VITE_MAP_STYLE_URL || "https://tiles.openfreemap.org/styles/liberty";
+const INDIA = [80, 22];
 const EMPTY = { type: "FeatureCollection", features: [] };
 const COLORS = { safe: "#16a34a", direct: "#dc2626", origin: "#2563eb", destination: "#1f2937" };
 
@@ -42,6 +43,7 @@ export default function MapView({ area, origin, destination, result, mode, repor
   const container = useRef(null);
   const mapRef = useRef(null);
   const pickRef = useRef(onPick);
+  const shownRef = useRef(null);
   const [ready, setReady] = useState(false);
   pickRef.current = onPick;
 
@@ -76,8 +78,38 @@ export default function MapView({ area, origin, destination, result, mode, repor
     // Only the city is ever on screen: the view can't show (or be clicked) outside its box.
     map.setMaxBounds(null);
     map.setMinZoom(null);
-    map.fitBounds(area.bbox, { padding, duration: 0 });
-    map.setMaxBounds(area.bbox);
+    const first = !shownRef.current;
+    shownRef.current = area;
+    if (first) {
+      map.fitBounds(area.bbox, { padding, duration: 0 });
+      map.setMaxBounds(area.bbox);
+      return;
+    }
+    // Switching city: pull out to India on the globe, dive into the new city tilted, then level out.
+    // Each step checks the city is still the chosen one, so a quick re-pick cancels the rest.
+    map.stop();
+    const live = () => shownRef.current === area;
+    const step = (fn, opts) => {
+      const done = map.once("moveend");
+      map[fn]({ ...opts, padding });
+      return done;
+    };
+    // Zoom measured while still zoomed in (on the zoomed-out globe it comes out short). The centre is
+    // the box's own: the padding passed to each step already shifts it clear of the panel.
+    const { zoom } = map.cameraForBounds(area.bbox, { padding });
+    const center = [(area.bbox[0] + area.bbox[2]) / 2, (area.bbox[1] + area.bbox[3]) / 2];
+    // Globe only for the trip: maxBounds (the city lock) only works on the flat map.
+    map.setProjection({ type: "globe" });
+    (async () => {
+      await step("easeTo", { center: INDIA, zoom: desktop ? 3.6 : 2.8, pitch: 0, bearing: 0, duration: 1600 });
+      if (!live()) return;
+      await step("flyTo", { center, zoom, pitch: 55, bearing: -20, duration: 2600, curve: 1.2 });
+      if (!live()) return;
+      await step("easeTo", { pitch: 0, bearing: 0, duration: 1200 });
+      if (!live()) return;
+      map.setProjection({ type: "mercator" });
+      map.setMaxBounds(area.bbox);
+    })();
   }, [ready, area]);
 
   useEffect(() => {

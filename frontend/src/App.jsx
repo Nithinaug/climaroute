@@ -278,7 +278,7 @@ export default function App() {
         onPick={pick}
       />
       <aside aria-label="Route options"
-        className="absolute inset-x-0 bottom-0 max-h-[55dvh] overflow-y-auto rounded-t-3xl bg-white shadow-[0_-8px_30px_rgb(0_0_0/0.18)]
+        className="absolute inset-x-0 bottom-0 max-h-[55dvh] overflow-y-auto overscroll-none rounded-t-3xl bg-white shadow-[0_-8px_30px_rgb(0_0_0/0.18)]
           md:inset-x-auto md:top-4 md:bottom-auto md:left-4 md:w-[380px] md:max-h-[calc(100dvh-2rem)] md:rounded-3xl">
         <header className={`grid gap-3 px-5 pt-5 pb-4 transition-colors duration-500 ${summer ? "bg-sun text-sun-deep" : "bg-rain text-white"}`}>
           <div>
