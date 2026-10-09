@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparison, conditionsText, todayAt, duration, noDifference } from "./format.js";
+import { comparison, todayAt, duration, noDifference } from "./format.js";
 
 const stats = (safe, direct) => ({
   safe: { duration_min: 20, shaded_pct: null, risk_streets: null, reported_streets: 0, ...safe },
@@ -35,15 +35,6 @@ describe("reports", () => {
   it("monsoon counts avoided reported floods too", () => {
     const s = stats({ risk_streets: 0 }, { risk_streets: 1, reported_streets: 1 });
     expect(comparison(s, "monsoon")).toBe("6 min longer · avoids 2 flood-risk streets");
-  });
-});
-
-describe("conditionsText", () => {
-  it("summer shows weather and shade date", () => {
-    const c = { temperature_c: 31.4, cloud_cover_pct: 20, heat_factor: 0.53, shade_date: "2026-10-08", active_reports: 1 };
-    expect(conditionsText(c, "summer")).toBe(
-      "31°C · 20% cloud · heat weight 0.53 · shade for 2026-10-08 · 1 flood report",
-    );
   });
 });
 

@@ -125,16 +125,20 @@ def _upcoming(w: Weather, minutes: int) -> list[tuple[datetime, float]]:
     return [(t, mm) for t, mm in w.soon if w.now < t <= w.now + timedelta(minutes=minutes)]
 
 
-def effective_rain(w: Weather) -> float:
-    """mm/hour that matters for flooding: current rain, past rain decayed, or rain due
-    within the hour."""
+def effective_rain(w: Weather, when: datetime | None = None) -> float:
+    """mm/hour that matters for flooding at `when` (default now): rain then, earlier rain
+    still draining, or rain due within the hour. Later departures use the forecast."""
+    when = when or w.now
     lingering = [
-        mm * 0.5 ** ((w.now - t).total_seconds() / 3600 / DRAIN_HALF_LIFE_H)
+        mm * 0.5 ** ((when - t).total_seconds() / 3600 / DRAIN_HALF_LIFE_H)
         for t, mm in zip(w.hours, w.rain, strict=True)
-        if t <= w.now
+        if t <= when
     ]
-    coming = [mm for _, mm in _upcoming(w, SOON_MINUTES)]
-    return round(max([w.rain_now, *lingering, *coming]), 2)
+    end = when + timedelta(minutes=SOON_MINUTES)
+    coming = [mm for t, mm in w.soon if when < t <= end]
+    coming += [mm for t, mm in zip(w.hours, w.rain, strict=True) if when < t <= end]
+    current = [w.rain_now] if abs((when - w.now).total_seconds()) <= 30 * 60 else []
+    return round(max([*current, *lingering, *coming, 0.0]), 2)
 
 
 def rain_soon(w: Weather) -> tuple[datetime, float] | None:
@@ -180,12 +184,15 @@ def _near(ws: list[Weather], a: tuple[float, float], b: tuple[float, float]) -> 
 
 
 def trip(
-    ws: list[Weather], a: tuple[float, float], b: tuple[float, float]
+    ws: list[Weather],
+    a: tuple[float, float],
+    b: tuple[float, float],
+    when: datetime | None = None,
 ) -> tuple[float, Weather]:
-    """(rain mm/h for flood risk: the worst grid cell the trip's box touches,
+    """(rain mm/h for flood risk at `when`: the worst grid cell the trip's box touches,
     weather nearest the trip's middle for heat). a, b are (lat, lon)."""
     middle = nearest(ws, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-    return max(effective_rain(w) for w in _near(ws, a, b)), middle
+    return max(effective_rain(w, when) for w in _near(ws, a, b)), middle
 
 
 def trip_rain_soon(

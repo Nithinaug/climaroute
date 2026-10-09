@@ -1,7 +1,7 @@
 import { motion, MotionConfig, useSpring, useTransform } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URLS, getArea, getBestTime, getNow, getPlaceName, getRoute, searchPlaces, setCityApi } from "./api.js";
-import { comparison, conditionsText, duration, noDifference, todayAt } from "./format.js";
+import { comparison, duration, noDifference, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
 import RainOverlay from "./RainOverlay.jsx";
 
@@ -376,21 +376,24 @@ export default function App() {
   // Coordinates, not objects: adding a place name to a point must not re-route.
   }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, simulateRain, refresh]);
 
-  // The city's temperature now: on choosing a city, then every 10 minutes while the tab is visible.
+  // The city's temperature: now, or the forecast for the chosen departure time. Loaded on choosing
+  // a city or a time, then every 10 minutes while the tab is visible.
   useEffect(() => {
     if (!area) return;
     let cancelled = false;
     const load = () =>
       document.visibilityState === "visible" &&
-      getNow().then((w) => !cancelled && setNowWeather(w)).catch(() => {});
+      getNow(time && todayAt(time)).then((w) => !cancelled && setNowWeather(w)).catch(() => {});
     setNowWeather(null);
     load();
     const id = setInterval(load, REFRESH_MS);
+    document.addEventListener("visibilitychange", load); // back on the tab: fresh reading
     return () => {
       cancelled = true;
       clearInterval(id);
+      document.removeEventListener("visibilitychange", load);
     };
-  }, [area]);
+  }, [area, time]);
 
   // "Leave now" routes go stale (sun, rain): re-route every 10 minutes while the tab is visible,
   // and on coming back to the tab if it's been longer. Set times are plans, so they're left alone.
@@ -418,7 +421,7 @@ export default function App() {
     getBestTime({
       origin: { lat: origin.lat, lon: origin.lon },
       destination: { lat: destination.lat, lon: destination.lon },
-      mode: "summer",
+      mode,
       transport,
       ...(time && { departure_time: todayAt(time) }),
     })
@@ -447,13 +450,13 @@ export default function App() {
       : null;
 
   const summer = mode === "summer";
-  // Temperature in the city right now (not the forecast for the departure time).
+  // Temperature in the city now, or forecast for the departure time when one is set.
   const tempChip = nowWeather?.temperature_c != null && (
     <span className="inline-flex items-center gap-1 rounded-full px-2 text-sm font-semibold text-muted"
-      title={`Temperature in ${area?.name} now`}>
+      title={time ? `Forecast for ${time} in ${area?.name}` : `Temperature in ${area?.name} now`}>
       <Icon name="thermostat" className="!text-[18px]" />
       {Math.round(nowWeather.temperature_c)}°C
-      <span className="sr-only">in {area?.name} now</span>
+      <span className="sr-only">{time ? `forecast for ${time}` : `in ${area?.name} now`}</span>
     </span>
   );
   const clearButton = (origin || destination) && (
@@ -552,11 +555,7 @@ export default function App() {
             </label>
           )}
 
-          {summer ? (
-            <TimeMenu time={time} onChange={setTime}>{tempChip}{clearButton}</TimeMenu>
-          ) : (
-            (tempChip || clearButton) && <div className="flex items-center gap-2">{tempChip}{clearButton}</div>
-          )}
+          <TimeMenu time={time} onChange={setTime}>{tempChip}{clearButton}</TimeMenu>
 
           <div aria-live="polite" className="grid gap-3">
             {hint && <p className="text-muted">{hint}</p>}
@@ -584,19 +583,22 @@ export default function App() {
                 <p className="text-lg font-extrabold leading-snug">{comparison(result.stats, mode)}</p>
                 <Stats title="Safe route" s={result.stats.safe} mode={mode} color="var(--color-safe)" />
                 {!same && <Stats title="Direct route" s={result.stats.direct} mode={mode} color="var(--color-risk)" />}
-                {summer && !best && (
-                  <button type="button" className={`${linkBtn} justify-self-start text-sun-deep`} onClick={findBestTime}>Best time to leave?</button>
+                {/* Simulated rain is the same at every hour, so there's no best time to find. */}
+                {!best && !(simulateRain && !summer) && (
+                  <button type="button" className={`${linkBtn} justify-self-start ${summer ? "text-sun-deep" : "text-rain"}`}
+                    onClick={findBestTime}>Best time to leave?</button>
                 )}
                 {best && (
-                  <p className="rounded-xl bg-sun-soft px-3 py-2 text-sun-deep">
-                    Best in the next 3 h: leave at <strong>{best.best.time}</strong> ({best.best.shaded_pct}% shaded
-                    {best.best.temperature_c != null && `, ${Math.round(best.best.temperature_c)}°C`}).{" "}
+                  <p className={`rounded-xl px-3 py-2 ${summer ? "bg-sun-soft text-sun-deep" : "bg-rain-soft text-rain"}`}>
+                    Best in the next 3 h: leave at <strong>{best.best.time}</strong>{" "}
+                    {summer
+                      ? `(${best.best.shaded_pct}% shaded${best.best.temperature_c != null ? `, ${Math.round(best.best.temperature_c)}°C` : ""}).`
+                      : `(${best.best.risk_streets} flood-risk street${best.best.risk_streets === 1 ? "" : "s"}, ${best.best.rain_mm_per_hour} mm/h rain).`}{" "}
                     {best.best.time !== best.options[0].time && (
                       <button type="button" className={linkBtn} onClick={() => setTime(best.best.time)}>Use this time</button>
                     )}
                   </p>
                 )}
-                {!summer && <p className="text-xs text-muted">{conditionsText(result.conditions, mode)}</p>}
               </motion.section>
             )}
           </div>

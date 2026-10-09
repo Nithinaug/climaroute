@@ -33,7 +33,7 @@ export const getRoute = (params) =>
 
 export const searchPlaces = (text) => request(`/search?q=${encodeURIComponent(text)}`);
 
-export const getNow = () => request("/now");
+export const getNow = (at) => request(at ? `/now?at=${encodeURIComponent(at)}` : "/now");
 
 export const getPlaceName = ({ lat, lon }, transport = "walk") =>
   request(`/place?lat=${lat}&lon=${lon}&transport=${transport}`);

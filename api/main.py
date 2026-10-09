@@ -144,14 +144,22 @@ def get_area():
 
 
 @app.get("/now")
-def now():
-    """Weather right now at the city centre, for the panel's temperature chip."""
+def now(at: datetime | None = None):
+    """Weather at the city centre for the panel's temperature chip: the current reading, or
+    with `at` (a departure time) the forecast for that hour."""
     try:
         w = weather.nearest(weather.current(), area.CENTER["lat"], area.CENTER["lon"])
     except weather.WeatherUnavailableError:
         raise ApiError(
             503, "WEATHER_UNAVAILABLE", "Live weather is unavailable right now."
         ) from None
+    if at is not None:
+        at = at.replace(tzinfo=TZ) if at.tzinfo is None else at
+        return {
+            "temperature_c": weather.at(w, at)[0],
+            "feels_like_c": weather.feels_like(w, at),
+            "rain_mm_per_hour": None,
+        }
     return {
         "temperature_c": w.temp_now,
         "feels_like_c": w.feels_now,
@@ -201,8 +209,12 @@ def route(req: RouteRequest):
         rain_mm = req.simulate_rain_mm_per_hour
     elif req.mode == "monsoon":
         try:
-            rain_mm, _ = weather.trip(weather.current(), trip_a, trip_b)
-            soon = weather.trip_rain_soon(weather.current(), trip_a, trip_b)
+            # A set departure time uses the rain forecast for then; "now" also warns of rain
+            # due in the next 2 h.
+            when = req.departure_time and departure
+            rain_mm, _ = weather.trip(weather.current(), trip_a, trip_b, when)
+            if when is None:
+                soon = weather.trip_rain_soon(weather.current(), trip_a, trip_b)
         except weather.WeatherUnavailableError:
             raise ApiError(
                 503, "RAIN_UNAVAILABLE", "Live rainfall is unavailable. Please try again shortly."
@@ -269,24 +281,38 @@ def route(req: RouteRequest):
 
 @app.post("/best-time")
 def best_time(req: RouteRequest):
-    """Summer: the safe route's shade and heat if you leave now or in the next 3 hours."""
+    """The safe route if you leave now or in the next 3 hours. Summer: least sun exposure.
+    Monsoon: fewest flood-risk streets, then least rain (ties go to the earliest time)."""
     start = req.departure_time or datetime.now(TZ)
     start = start.replace(tzinfo=TZ) if start.tzinfo is None else start
     options = []
     for i in range(BEST_TIME_STEPS):
         when = start + timedelta(minutes=i * BEST_TIME_STEP_MIN)
-        body = route(req.model_copy(update={"mode": "summer", "departure_time": when}))
+        try:
+            body = route(req.model_copy(update={"departure_time": when}))
+        except ApiError as e:
+            if e.code != "NO_ROUTE":  # flooded shut at that time: just not an option
+                raise
+            continue
         safe, c = body["stats"]["safe"], body["conditions"]
-        options.append(
-            {
-                "time": c["slot_time"],
+        option = {"time": c["slot_time"]}
+        if req.mode == "summer":
+            option |= {
                 "shaded_pct": safe["shaded_pct"],
                 "temperature_c": c["temperature_c"],
                 "heat_factor": c["heat_factor"],
                 # Sun exposure that actually matters: unshaded share x how hot it is.
                 "exposure": round((100 - safe["shaded_pct"]) / 100 * (c["heat_factor"] or 0), 3),
             }
-        )
+        else:
+            option |= {
+                "risk_streets": safe["risk_streets"],
+                "rain_mm_per_hour": c["rain_mm_per_hour"],
+                "exposure": (safe["risk_streets"], c["rain_mm_per_hour"]),
+            }
+        options.append(option)
+    if not options:
+        raise ApiError(422, "NO_ROUTE", "No safe route found in the next 3 hours.")
     return {"options": options, "best": min(options, key=lambda o: o["exposure"])}
 
 

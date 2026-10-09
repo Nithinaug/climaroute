@@ -205,9 +205,27 @@ def test_points_away_from_streets_are_flagged(monkeypatch):
 
 
 
-def test_now_reports_current_weather():
+def test_now_reports_current_weather_or_the_forecast_for_a_time():
     assert client.get("/now").json() == {
         "temperature_c": 33.0,
         "feels_like_c": 33.0,
         "rain_mm_per_hour": 0.0,
     }
+    later = client.get("/now", params={"at": "2026-10-08T16:10:00+05:30"}).json()
+    assert later["temperature_c"] == 31.0  # the 16:00 forecast in the sample
+
+
+def test_monsoon_best_time_ranks_by_flood_risk_then_rain():
+    body = client.post(
+        "/best-time",
+        json={
+            "origin": INSIDE_A,
+            "destination": INSIDE_B,
+            "mode": "monsoon",
+            "departure_time": "2026-10-08T13:00:00+05:30",
+        },
+    ).json()
+    rains = {o["time"]: o["rain_mm_per_hour"] for o in body["options"]}
+    assert rains["14:00"] == 30.0  # the 14:00 downpour in the sample forecast
+    rank = lambda o: (o["risk_streets"], o["rain_mm_per_hour"])  # noqa: E731
+    assert all(rank(body["best"]) <= rank(o) for o in body["options"])

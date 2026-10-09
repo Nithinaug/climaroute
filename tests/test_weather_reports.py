@@ -71,3 +71,10 @@ def test_feels_like_uses_apparent_temperature_when_given():
     w = weather.parse(payload)
     assert weather.feels_like(w, w.hours[1]) == 41.5
     assert weather.feels_like(weather.parse(SAMPLE), w.hours[1]) == 33.0  # falls back to air temp
+
+
+def test_rain_at_a_later_departure_uses_the_forecast():
+    w = weather.parse(SAMPLE)  # 30 mm in the 14:00 hour, dry at 15:00 (now) and 16:00
+    assert weather.effective_rain(w, w.hours[1]) == 30.0
+    later = weather.effective_rain(w, w.hours[3])  # 2 h after the downpour: mostly drained
+    assert 0 < later < 30.0 * 0.5

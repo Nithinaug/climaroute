@@ -281,7 +281,8 @@ Built:
 - Routes: safe route solid green, direct route solid red; comparison card,
   e.g. "2 min longer · 33% shaded vs 22%" or "avoids 14 flood-risk streets".
   Durations over an hour show as "1 h 33 min".
-- Summer: "Best time to leave?" (next 3 h) with "Use this time".
+- "Best time to leave?" (next 3 h) with "Use this time": shade and heat in summer, flood-risk
+  streets and forecast rain in monsoon (hidden while simulating rain).
 - Use my location and Clear below the results. (Flood reporting was removed
   from the app; the API endpoints remain.)
 - Summer: drinking-water points at street zoom. Known flood spots aren't drawn; routes avoid them.
@@ -718,9 +719,11 @@ blocks its street for 1 h, then fades to nothing at 3 h.
 
 #### `POST /best-time`
 
-Same body as `/route`. Runs the summer route for now and every 30 min for 3 h and returns
-`{"options": [{"time", "shaded_pct", "temperature_c", "heat_factor", "exposure"}], "best": <option>}`,
-where `exposure = (1 - shaded) x heat_factor` (lower is better). ~7 route runs, so ~2-3 s.
+Same body as `/route`. Runs the route for now and every 30 min for 3 h and returns
+`{"options": [...], "best": <option>}`. Summer options: `time, shaded_pct, temperature_c,
+heat_factor, exposure` with `exposure = (1 - shaded) x heat_factor`. Monsoon options: `time,
+risk_streets, rain_mm_per_hour` (rain forecast for that departure), best = fewest risk streets,
+then least rain. Times with no route are skipped. ~7 route runs, so ~2-3 s.
 
 #### `GET /search?q=<text>`
 
