@@ -1,25 +1,26 @@
 import { motion, MotionConfig, useSpring, useTransform } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { API_URLS, getArea, getBestTime, getPlaceName, getReports, getRoute, postReport, searchPlaces, setCityApi } from "./api.js";
-import { comparison, conditionsText, duration, todayAt } from "./format.js";
+import { API_URLS, getArea, getBestTime, getPlaceName, getRoute, searchPlaces, setCityApi } from "./api.js";
+import { comparison, conditionsText, duration, noDifference, todayAt } from "./format.js";
 import MapView from "./MapView.jsx";
 
 const inArea = (area, p) =>
   area && p.lon >= area.bbox[0] && p.lat >= area.bbox[1] && p.lon <= area.bbox[2] && p.lat <= area.bbox[3];
 
-// Segmented switch; the selected pill slides between options.
+// Segmented switch; the selected pill slides between options. Plain CSS on purpose: Motion's
+// layoutId re-animated the pill whenever the panel above it changed height or scrolled.
 function Toggle({ label, value, options, onChange, tone = "bg-white", text = "text-ink", track = "bg-black/5" }) {
+  const i = options.findIndex(([v]) => v === value);
   return (
-    <fieldset className={`grid grid-flow-col auto-cols-fr rounded-full p-1 ${track}`}>
+    <fieldset className={`relative grid grid-flow-col auto-cols-fr rounded-full p-1 ${track}`}>
       <legend className="sr-only">{label}</legend>
+      <span aria-hidden="true"
+        className={`absolute inset-y-1 left-1 rounded-full shadow-sm transition-transform duration-300 ease-out motion-reduce:transition-none ${tone}`}
+        style={{ width: `calc((100% - 0.5rem) / ${options.length})`, transform: `translateX(${i * 100}%)` }} />
       {options.map(([v, name]) => (
         <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(v)}
-          className="relative min-h-10 rounded-full px-3 font-semibold cursor-pointer">
-          {value === v && (
-            <motion.span layoutId={label} className={`absolute inset-0 rounded-full shadow-sm ${tone}`}
-              transition={{ type: "spring", stiffness: 500, damping: 38 }} />
-          )}
-          <span className={`relative ${value === v ? text : "opacity-70"}`}>{name}</span>
+          className="relative min-h-10 cursor-pointer rounded-full px-3 font-semibold">
+          <span className={value === v ? text : "opacity-70"}>{name}</span>
         </button>
       ))}
     </fieldset>
@@ -37,7 +38,7 @@ function Count({ value }) {
 // Shade as a ring that fills to its percentage.
 function Ring({ pct, color }) {
   return (
-    <span className="relative grid size-14 shrink-0 place-items-center">
+    <span className="relative grid size-12 shrink-0 place-items-center">
       <svg viewBox="0 0 36 36" className="absolute inset-0 -rotate-90" aria-hidden="true">
         <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--color-line)" strokeWidth="3.5" />
         <motion.circle cx="18" cy="18" r="15.5" fill="none" stroke={color} strokeWidth="3.5" strokeLinecap="round"
@@ -54,7 +55,103 @@ const Icon = ({ name, className = "" }) => (
   <span className={`material-symbols-rounded align-middle ${className}`} aria-hidden="true">{name}</span>
 );
 
-const field = "w-full rounded-xl border border-line bg-white px-3 py-2.5 text-base";
+const pad = (n) => String(n).padStart(2, "0");
+const hhmm = (mins) => `${pad(Math.floor(mins / 60) % 24)}:${pad(mins % 60)}`;
+const minutesNow = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const sunIcon = (mins) => (mins < 360 || mins >= 1140 ? "dark_mode" : mins < 480 || mins >= 1020 ? "wb_twilight" : "light_mode");
+
+// "Leave now" pill with a small menu to type the time, applied with a button (or Enter) so
+// half-typed times don't re-route.
+function TimeMenu({ time, onChange, children }) {
+  const [open, setOpen] = useState(false);
+  const [hh, setHh] = useState("");
+  const [mm, setMm] = useState("");
+  const minuteRef = useRef(null);
+  const box = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    box.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const outside = (e) => !box.current.contains(e.target) && setOpen(false);
+    const esc = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (!open) {
+      const [h, m] = (time || hhmm(minutesNow())).split(":");
+      setHh(h);
+      setMm(m);
+    }
+    setOpen((o) => !o);
+  };
+  const apply = (v) => {
+    onChange(v);
+    setOpen(false);
+    // Focus back on the pill (the typed field is going away) without scrolling the panel.
+    box.current.querySelector("button").focus({ preventScroll: true });
+  };
+  const hourOk = /^\d{1,2}$/.test(hh) && Number(hh) < 24;
+  const minuteOk = /^\d{1,2}$/.test(mm) && Number(mm) < 60;
+  const valid = hourOk && minuteOk;
+  const value = valid ? `${pad(Number(hh))}:${pad(Number(mm))}` : "";
+
+  return (
+    <div ref={box} className="grid">
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" aria-expanded={open} aria-haspopup="dialog" onClick={toggle}
+          className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full bg-black/5 pl-3 pr-2 font-semibold">
+          <Icon name="schedule" />
+          {time ? `Leave at ${time}` : "Leave now"}
+          <Icon name="arrow_drop_down" className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {children}
+      </div>
+      {open && (
+        <div role="dialog" aria-label="Departure time"
+          className="mt-2 grid w-full gap-4 rounded-2xl border border-line bg-white p-4">
+          {/* Typed hours and minutes; two hour digits jump to the minutes, Enter applies. */}
+          <div className="flex items-center gap-2 text-3xl font-extrabold tabular-nums">
+            <Icon name={valid ? sunIcon(Number(hh) * 60 + Number(mm)) : "schedule"} className="text-sun" />
+            <input value={hh} inputMode="numeric" maxLength={2} aria-label="Hour (0 to 23)" autoFocus
+              onFocus={(e) => e.target.select()} onKeyDown={(e) => e.key === "Enter" && valid && apply(value)}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "");
+                setHh(v);
+                if (v.length === 2) minuteRef.current.focus();
+              }}
+              className={`w-[2.6ch] rounded-lg border bg-white text-center ${hourOk ? "border-line" : "border-risk"}`} />
+            :
+            <input ref={minuteRef} value={mm} inputMode="numeric" maxLength={2} aria-label="Minute (0 to 59)"
+              onFocus={(e) => e.target.select()} onKeyDown={(e) => e.key === "Enter" && valid && apply(value)}
+              onChange={(e) => setMm(e.target.value.replace(/\D/g, ""))}
+              className={`w-[2.6ch] rounded-lg border bg-white text-center ${minuteOk ? "border-line" : "border-risk"}`} />
+          </div>
+          <div className="flex gap-2">
+            <button type="button" disabled={!valid} onClick={() => apply(value)}
+              className="min-h-10 flex-1 cursor-pointer rounded-full bg-sun font-semibold text-sun-deep disabled:cursor-default disabled:opacity-50">
+              {valid ? `Leave at ${value}` : "Enter a time"}
+            </button>
+            {/* The only way back to "now" once a time is set. */}
+            {time && (
+              <button type="button" onClick={() => apply("")}
+                className="min-h-10 cursor-pointer rounded-full border border-line px-4 font-semibold hover:bg-black/5">
+                Leave now
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const field = "w-full rounded-xl border border-line bg-white px-3 py-2 text-base";
 const linkBtn = "cursor-pointer font-semibold underline underline-offset-2";
 
 // Fill in a tapped point's street name once it arrives (if the point hasn't changed since).
@@ -88,8 +185,8 @@ function PlaceSearch({ label, place, onSelect }) {
 
   return (
     <div className="relative">
-      <label className="grid gap-1 text-sm text-muted">
-        {label}
+      <label>
+        <span className="sr-only">{label}</span>
         <input type="search" value={text} onChange={(e) => setText(e.target.value)}
           className={`${field} text-ink`} />
       </label>
@@ -109,6 +206,12 @@ function PlaceSearch({ label, place, onSelect }) {
 
 function Stats({ title, s, mode, color }) {
   const summer = mode === "summer";
+  const clearButton = (origin || destination) && (
+    <button type="button" className={`${linkBtn} justify-self-end px-2 text-muted`}
+      onClick={() => { setOrigin(null); setDestination(null); setResult(null); }}>
+      Clear
+    </button>
+  );
   return (
     <div className="flex items-center gap-3">
       <span className="h-10 w-1.5 shrink-0 rounded-full" style={{ background: color }} aria-hidden="true" />
@@ -118,11 +221,11 @@ function Stats({ title, s, mode, color }) {
       </div>
       {summer ? (
         <span className="grid justify-items-center gap-0.5 text-xs text-muted">
-          <Ring pct={s.shaded_pct} color={color} />shaded
+          <Ring pct={s.shaded_pct ?? 0} color={color} />shaded
         </span>
       ) : (
         <p className="text-right leading-none">
-          <span className="text-3xl font-extrabold tabular-nums"><Count value={s.risk_streets} /></span>
+          <span className="text-3xl font-extrabold tabular-nums"><Count value={s.risk_streets ?? 0} /></span>
           <span className="block text-xs text-muted">flood-risk streets</span>
         </p>
       )}
@@ -138,11 +241,7 @@ export default function App() {
   const [transport, setTransport] = useState("walk");
   const [time, setTime] = useState(""); // "" = leave now
   const [simulateRain, setSimulateRain] = useState(false);
-  const timeRef = useRef(null);
   const [best, setBest] = useState(null);
-  const [reports, setReports] = useState(null);
-  const [reporting, setReporting] = useState(false);
-  const [notice, setNotice] = useState(null);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -156,9 +255,7 @@ export default function App() {
     setOrigin(null);
     setDestination(null);
     setResult(null);
-    setReports(null);
     setError(null);
-    getReports().then(setReports).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -172,21 +269,8 @@ export default function App() {
       .catch((e) => setError(e.message));
   }, [chooseCity]);
 
-  const report = useCallback(async (p) => {
-    setReporting(false);
-    try {
-      await postReport(p);
-      setReports(await getReports());
-      setNotice("Thanks! Routes will avoid this street for the next 3 hours.");
-    } catch (e) {
-      setError(e.message);
-    }
-  }, []);
-
   const pick = useCallback(
     (p) => {
-      setNotice(null);
-      if (reporting) return report(p);
       if (area && !inArea(area, p)) return; // greyed out on the map
       setError(null);
       if (!origin || destination) {
@@ -195,11 +279,10 @@ export default function App() {
         setDestination(null);
         setResult(null);
       } else {
-        setDestination(p);
-        nameIt(p, setDestination);
+        setDestination(p); // named once its route is back (see the route effect)
       }
     },
-    [area, origin, destination, reporting, report],
+    [area, origin, destination],
   );
 
   useEffect(() => {
@@ -222,12 +305,18 @@ export default function App() {
         setResult(null);
         setError(e.message);
       })
-      .finally(() => !cancelled && setLoading(false));
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        // Name a tapped destination only after the route: sent together, the two requests need
+        // two Lambdas, and the second is usually cold (seconds to load the street graph).
+        if (!destination.name) nameIt(destination, setDestination);
+      });
     return () => {
       cancelled = true;
     };
   // Coordinates, not objects: adding a place name to a point must not re-route.
-  }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, simulateRain, reports]);
+  }, [origin?.lat, origin?.lon, destination?.lat, destination?.lon, mode, transport, time, simulateRain]);
 
   const findBestTime = () =>
     getBestTime({
@@ -255,15 +344,21 @@ export default function App() {
     );
   };
 
-  const hint = reporting
-    ? "Tap the flooded street on the map."
-    : !origin
+  const hint = !origin
     ? "Search or tap the map to set your start."
     : !destination
       ? "Now search or tap your destination."
       : null;
 
   const summer = mode === "summer";
+  const clearButton = (origin || destination) && (
+    <button type="button" className={`${linkBtn} justify-self-end px-2 text-muted`}
+      onClick={() => { setOrigin(null); setDestination(null); setResult(null); }}>
+      Clear
+    </button>
+  );
+  // Same shade (or flood risk) and same time both ways: show just the one (green) route.
+  const same = result && noDifference(result.stats, mode);
 
   return (
     <MotionConfig reducedMotion="user">
@@ -272,46 +367,51 @@ export default function App() {
         area={area}
         origin={origin}
         destination={destination}
-        result={result}
+        result={same ? { ...result, direct_route: null } : result}
         mode={mode}
-        reports={reports}
         onPick={pick}
       />
       <aside aria-label="Route options"
         className="absolute inset-x-0 bottom-0 max-h-[55dvh] overflow-y-auto overscroll-none rounded-t-3xl bg-white shadow-[0_-8px_30px_rgb(0_0_0/0.18)]
           md:inset-x-auto md:top-4 md:bottom-auto md:left-4 md:w-[380px] md:max-h-[calc(100dvh-2rem)] md:rounded-3xl">
-        <header className={`grid gap-3 px-5 pt-5 pb-4 transition-colors duration-500 ${summer ? "bg-sun text-sun-deep" : "bg-rain text-white"}`}>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">ClimaRoute</h1>
-            <p className="opacity-80">{summer ? "Shaded routes in the heat." : "Dry routes in the rain."}</p>
-          </div>
+        <header className={`grid gap-3 p-4 transition-colors duration-500 ${summer ? "bg-sun text-sun-deep" : "bg-rain text-white"}`}>
+          <h1 className="sr-only">ClimaRoute</h1>
           <Toggle label="Season" value={mode} onChange={setMode} track="bg-black/15"
             tone={summer ? "bg-sun-soft" : "bg-white"} text={summer ? "text-sun-deep" : "text-rain"}
             options={[["summer", "Summer"], ["monsoon", "Monsoon"]]} />
         </header>
 
-        <div className="grid gap-4 p-5">
-          {cities.length > 1 && (
-            <label className="grid gap-1 text-sm text-muted">
-              City
-              <select value={area?.url} className={`${field} text-ink`}
-                onChange={(e) => chooseCity(cities.find((c) => c.url === e.target.value))}>
-                {cities.map((c) => <option key={c.url} value={c.url}>{c.name}</option>)}
-              </select>
-            </label>
-          )}
-
-          <Toggle label="Travelling by" value={transport} onChange={setTransport}
-            tone={summer ? "bg-sun-soft" : "bg-rain-soft"} text={summer ? "text-sun-deep" : "text-rain"}
-            options={[["walk", <><Icon name="directions_walk" /><span className="sr-only">Walk</span></>],
-                      ["two_wheeler", <><Icon name="two_wheeler" /><span className="sr-only">Two-wheeler</span></>]]} />
+        <div className="grid gap-3 p-4">
+          {/* City and how you're travelling share a row. */}
+          <div className="flex items-end gap-2">
+            {cities.length > 1 && (
+              <label className="grid min-w-0 flex-1 gap-0.5 text-xs text-muted">
+                City
+                <select value={area?.url} className={`${field} text-ink`}
+                  onChange={(e) => chooseCity(cities.find((c) => c.url === e.target.value))}>
+                  {cities.map((c) => <option key={c.url} value={c.url}>{c.name}</option>)}
+                </select>
+              </label>
+            )}
+            <div className="w-36 shrink-0">
+              <Toggle label="Travelling by" value={transport} onChange={setTransport}
+                tone={summer ? "bg-sun-soft" : "bg-rain-soft"} text={summer ? "text-sun-deep" : "text-rain"}
+                options={[["walk", <><Icon name="directions_walk" /><span className="sr-only">Walk</span></>],
+                          ["two_wheeler", <><Icon name="two_wheeler" /><span className="sr-only">Two-wheeler</span></>]]} />
+            </div>
+          </div>
 
           {/* From and To joined like the two ends of a trip on the map. */}
           <div className="grid grid-cols-[14px_1fr_auto] gap-x-3">
-            <div className="flex flex-col items-center pt-[41px] pb-[17px]" aria-hidden="true">
-              <span className="size-3 rounded-full bg-origin ring-2 ring-white" />
-              <span className="my-1 flex-1 border-l-2 border-dotted border-muted/50" />
-              <span className="size-3 rounded-full bg-ink ring-2 ring-white" />
+            {/* Start: hollow circle; end: red pin (same marks as on the map), dots between. */}
+            <div className="flex flex-col items-center pt-[15px] pb-[11px]" aria-hidden="true">
+              <span className="size-3 rounded-full border-2 border-ink bg-white" />
+              <span className="flex flex-1 flex-col items-center justify-evenly">
+                <span className="size-1 rounded-full bg-muted" />
+                <span className="size-1 rounded-full bg-muted" />
+                <span className="size-1 rounded-full bg-muted" />
+              </span>
+              <Icon name="location_on" className="!text-[20px] leading-none text-risk" />
             </div>
             <div className="grid gap-3">
               <PlaceSearch label="From" place={origin}
@@ -319,11 +419,18 @@ export default function App() {
               <PlaceSearch label="To" place={destination}
                 onSelect={(p) => { setError(null); setResult(null); setDestination(p); }} />
             </div>
-            <button type="button" aria-label="Swap start and destination" disabled={!origin && !destination}
-              onClick={() => { setResult(null); setOrigin(destination); setDestination(origin); }}
-              className="mt-6 grid size-10 cursor-pointer place-items-center self-center rounded-full hover:bg-black/5 disabled:cursor-default disabled:opacity-40">
-              <Icon name="swap_vert" />
-            </button>
+            {/* Beside the From box: use my location. Beside the To box: swap the two. */}
+            <div className="flex flex-col gap-[14px] pt-px">
+              <button type="button" aria-label="Use my location" title="Use my location" onClick={useMyLocation}
+                className="grid size-10 cursor-pointer place-items-center rounded-full text-origin hover:bg-black/5">
+                <Icon name="my_location" />
+              </button>
+              <button type="button" aria-label="Swap start and destination" title="Swap start and destination"
+                disabled={!origin && !destination} onClick={() => { setOrigin(destination); setDestination(origin); }}
+                className="grid size-10 cursor-pointer place-items-center rounded-full hover:bg-black/5 disabled:cursor-default disabled:opacity-40">
+                <Icon name="swap_vert" />
+              </button>
+            </div>
           </div>
 
           {mode === "monsoon" && (
@@ -334,33 +441,31 @@ export default function App() {
             </label>
           )}
 
-          {summer && (
-            <label className="grid gap-1 text-sm text-muted">
-              <span className="sr-only">Leaving at</span>
-              {/* A "Leave now" pill; the real time input sits invisibly on top of it. */}
-              <span className="relative inline-flex min-h-10 items-center gap-2 justify-self-start rounded-full bg-black/5 pl-3 pr-2 text-base font-semibold text-ink">
-                <Icon name="schedule" />
-                {time ? `Leave at ${time}` : "Leave now"}
-                <Icon name="arrow_drop_down" />
-                <input ref={timeRef} type="time" value={time}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  onChange={(e) => setTime(e.target.value)} onClick={() => timeRef.current?.showPicker?.()} />
-              </span>
-              {time && <button type="button" className={`${linkBtn} justify-self-start text-sun-deep`} onClick={() => setTime("")}>Leave now instead</button>}
-            </label>
-          )}
+          {summer ? <TimeMenu time={time} onChange={setTime}>{clearButton}</TimeMenu> : clearButton}
 
           <div aria-live="polite" className="grid gap-3">
             {hint && <p className="text-muted">{hint}</p>}
             {loading && <p className="shiny font-semibold">Finding the safest route…</p>}
-            {notice && <p className="rounded-xl bg-safe/10 px-3 py-2 text-green-900">{notice}</p>}
             {error && <p className="rounded-xl bg-risk/10 px-3 py-2 text-red-800" role="alert">{error}</p>}
-            {result && !loading && (
-              <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                className="grid gap-4 rounded-2xl border border-line p-4">
+            {/* Kept (faded) while a new route loads, so the panel doesn't shrink and jump to the top. */}
+            {result && (
+              <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: loading ? 0.45 : 1, y: 0 }}
+                aria-busy={loading} className="grid gap-3 rounded-2xl border border-line p-4">
+                {!summer && result.conditions?.rain_soon && (
+                  <p className="flex items-start gap-2 rounded-xl bg-rain-soft px-3 py-2 text-rain">
+                    <Icon name="rainy" className="mt-0.5" />
+                    <span>
+                      Rain expected around <strong>{result.conditions.rain_soon.at}</strong>{" "}
+                      ({result.conditions.rain_soon.mm_per_hour} mm/h).{" "}
+                      {result.conditions.rain_soon.counted
+                        ? "The safe route already avoids the streets it will flood."
+                        : "Check again before you leave."}
+                    </span>
+                  </p>
+                )}
                 <p className="text-lg font-extrabold leading-snug">{comparison(result.stats, mode)}</p>
                 <Stats title="Safe route" s={result.stats.safe} mode={mode} color="var(--color-safe)" />
-                <Stats title="Direct route" s={result.stats.direct} mode={mode} color="var(--color-risk)" />
+                {!same && <Stats title="Direct route" s={result.stats.direct} mode={mode} color="var(--color-risk)" />}
                 {summer && !best && (
                   <button type="button" className={`${linkBtn} justify-self-start text-sun-deep`} onClick={findBestTime}>Best time to leave?</button>
                 )}
@@ -374,33 +479,10 @@ export default function App() {
                   </p>
                 )}
                 <p className="text-xs text-muted">{conditionsText(result.conditions, mode)}</p>
-                {reports?.features?.length > 0 && (
-                  <p className="flex items-center gap-2 text-xs text-muted">
-                    <span className="size-2.5 rounded-full border-2 border-amber-900 bg-amber-500" aria-hidden="true" />
-                    Reported flooding (fades over 3 h)
-                  </p>
-                )}
               </motion.section>
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={useMyLocation}
-              className="min-h-10 cursor-pointer rounded-full border border-line px-4 font-semibold hover:bg-black/5">
-              Use my location
-            </button>
-            <button type="button" aria-pressed={reporting} onClick={() => setReporting((r) => !r)}
-              className={`relative min-h-10 cursor-pointer rounded-full border px-4 font-semibold ${reporting ? "border-amber-600 bg-amber-500 text-amber-950" : "border-line hover:bg-black/5"}`}>
-              {reporting && <span className="absolute inset-0 rounded-full bg-amber-500 motion-safe:animate-ping" aria-hidden="true" />}
-              <span className="relative">{reporting ? "Tap the flooded street" : "Report flooding"}</span>
-            </button>
-            {(origin || destination) && (
-              <button type="button" className={`${linkBtn} px-2 text-muted`}
-                onClick={() => { setOrigin(null); setDestination(null); setResult(null); }}>
-                Clear
-              </button>
-            )}
-          </div>
 
         </div>
         {/* Fades the panel's bottom edge while there's more to scroll; sits empty at the end. */}

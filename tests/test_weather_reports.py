@@ -43,3 +43,21 @@ def test_trip_uses_worst_rain_near_the_route_and_nearest_heat():
 def test_grid_covers_the_area():
     points, dlat, dlon = weather.grid()
     assert len(points) >= 1 and dlat > 0 and dlon > 0
+
+
+def test_rain_due_soon_counts_and_warns():
+    from dataclasses import replace
+    from datetime import timedelta
+
+    base = weather.parse(SAMPLE)
+    dry = replace(base, rain_now=0.0, rain=[0.0] * len(base.rain))
+    at = lambda minutes, mm: (dry.now + timedelta(minutes=minutes), mm)  # noqa: E731
+    storm_in_45 = replace(dry, soon=(at(15, 0.0), at(45, 20.0)))
+    assert weather.effective_rain(storm_in_45) == 20.0  # routed for it already
+    assert weather.rain_soon(storm_in_45) == at(45, 20.0)
+    storm_in_90 = replace(dry, soon=(at(90, 20.0),))
+    assert weather.effective_rain(storm_in_90) == 0.0  # too far off to route for
+    assert weather.rain_soon(storm_in_90) == at(90, 20.0)  # but worth a warning
+    assert weather.rain_soon(replace(dry, soon=(at(30, 1.0),))) is None  # drizzle
+    here = (dry.lat, dry.lon)
+    assert weather.trip_rain_soon([dry, storm_in_90, storm_in_45], here, here) == at(45, 20.0)

@@ -22,7 +22,8 @@ BLOCKED = 1e9  # cost of an unusable edge; a path costing this much counts as no
 def _nearest_node(net: Net, lat: float, lon: float, label: str) -> int:
     dist, i = net.kdtree.query((lon * net.kx, lat * M_PER_DEG_LAT))
     if dist > config.SNAP_MAX_M:
-        raise OutOfAreaError(f"{label} is outside the covered area ({net.meta['area_name']}).")
+        # Inside the city but nowhere near a street (a lake, park or field).
+        raise OutOfAreaError(f"{label} isn't near a street. Pick a point on or next to a road.")
     return int(i)
 
 

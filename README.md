@@ -5,7 +5,8 @@ Safer routes through Indian cities in extreme weather, for people walking or on 
 - **Summer mode** finds the route with the most shade from buildings and trees for the time you
   leave, weighted by the current temperature and cloud cover.
 - **Monsoon mode** avoids low-lying streets that flood, scaled by live rainfall (including rain from
-  the last few hours that hasn't drained yet) and by flooding reported by other users.
+  the last few hours that hasn't drained yet, and rain forecast for the next hour) and by flood
+  reports sent to the API. Heavier rain due in the next 2 hours is shown as a warning.
 
 Every answer shows the safe route next to the direct route, so you can see what the detour buys you
 (e.g. "34% shaded vs 4%", "0 flood-prone streets vs 3").
@@ -42,7 +43,8 @@ parallel. At request time the two nearest slots are blended, so shade changes mi
 **Flood risk.** From the Copernicus 30 m elevation model we fill depressions and compute flow
 accumulation, then score each street by how much water collects there. Risk is multiplied by a rain
 factor; streets above a threshold are blocked (lower for two-wheelers, which stall in water a
-pedestrian can wade through). A user report blocks a street for an hour, then fades out over two.
+pedestrian can wade through). A flood report (`POST /reports`) blocks a street for an hour, then
+fades out over two. The API accepts reports; the web app doesn't have a report button.
 
 **Routing.** Street graphs are stored as compact numpy arrays. Edge costs are recomputed for every
 request (length × a heat or flood penalty, never below the length) and routed with scipy's Dijkstra.
@@ -56,7 +58,7 @@ request (length × a heat or flood penalty, never below the length) and routed w
 | Step Functions (Distributed Map) | Weekly shade pipeline over all tiles |
 | ECS Fargate | Building an area's data (too large and long-running for Lambda) |
 | S3 | Raw data, tiles, street graphs |
-| DynamoDB | Crowd flood reports (TTL expiry) |
+| DynamoDB | Flood reports sent to the API (TTL expiry) |
 | EventBridge | Weekly pipeline schedule, API warm-up |
 | ECR, CloudWatch | Images, logs |
 | Amplify Hosting | Frontend |
@@ -132,13 +134,25 @@ Built with help from AI coding tools: Claude Code (Anthropic).
 - Building heights are satellite estimates (Google Open Buildings) or defaults by building type,
   not surveys. Footprint coverage depends on Overture/OSM and is thinner in some neighbourhoods.
 - Tree shade only covers trees mapped in OpenStreetMap.
-- Flood risk is a terrain model (30 m elevation) plus known waterlogging spots and user reports,
-  not a hydrological simulation. Flooding with no local rain (lake overflow, blocked drains) is
-  only caught if someone reports it.
-- Weather is read at one point per city, so very local storms can be missed.
+- Flood risk is a terrain model (30 m elevation) plus known waterlogging spots and reports sent to the API,
+  not a hydrological simulation. It predicts rain-driven waterlogging; flooding with no local rain
+  (lake overflow, blocked drains, dam releases, high tide in Mumbai) is only caught if it's
+  reported to the API, and the web app has no report button.
+- Weather is read on a ~9 km grid, so very local storms can be missed. The 15-minute rain forecast
+  is interpolated from hourly models for India, so the time of an incoming storm is approximate.
 - Shade is computed for a given date and refreshed by re-running the pipeline (weekly schedule
   via `shade_schedule = true`); within a week the difference is small.
 - Travel times use constant speeds; no live traffic or road closures.
 - Flood reports are anonymous and unverified, so a false report can block a street for up to 3 h.
+
+## Future work
+
+- **Confirmed crowd reports:** bring the report button back with the safeguards map apps use: a
+  street counts as flooded once two people report it nearby, others can confirm or clear it
+  ("still flooded?"), and reports per device are limited.
+- **Traffic as a flood signal:** roads where traffic suddenly stops during rain are often under
+  water. A live traffic or incident feed would catch flooding that terrain and rain can't predict.
+- **Tides and official alerts:** raise Mumbai's flood risk at high tide, and use authority sources
+  (IMD warnings, city flood-monitoring systems) where they're available.
 
 Design notes for contributors: [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md).

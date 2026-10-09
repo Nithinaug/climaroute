@@ -201,10 +201,18 @@ resource "aws_cloudwatch_event_rule" "warmup" {
   schedule_expression = "rate(5 minutes)"
 }
 
+# Two targets on one rule fire together, so they keep two API Lambdas warm: a request that
+# arrives while one is busy (e.g. a street-name lookup next to a route) doesn't hit a cold start.
 resource "aws_cloudwatch_event_target" "warmup" {
+  count = 2
   rule  = aws_cloudwatch_event_rule.warmup.name
   arn   = aws_lambda_function.fn["api"].arn
   input = jsonencode({ warmup = true })
+}
+
+moved {
+  from = aws_cloudwatch_event_target.warmup
+  to   = aws_cloudwatch_event_target.warmup[0]
 }
 
 resource "aws_lambda_permission" "warmup" {

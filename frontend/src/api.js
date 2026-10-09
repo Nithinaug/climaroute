@@ -24,15 +24,6 @@ async function request(path, options) {
 export const getArea = (url) =>
   fetch(`${url}/area`).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))));
 
-export const getReports = () => request("/reports");
-
-export const postReport = (point) =>
-  request("/reports", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(point),
-  });
-
 export const getRoute = (params) =>
   request("/route", {
     method: "POST",

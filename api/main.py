@@ -166,13 +166,14 @@ def route(req: RouteRequest):
 
     departure = req.departure_time or datetime.now(TZ)
     departure = departure.replace(tzinfo=TZ) if departure.tzinfo is None else departure
-    rain_mm, temperature, cloud, heat = 0.0, None, None, 1.0
+    rain_mm, temperature, cloud, heat, soon = 0.0, None, None, 1.0, None
     trip_a, trip_b = (req.origin.lat, req.origin.lon), (req.destination.lat, req.destination.lon)
     if req.mode == "monsoon" and req.simulate_rain_mm_per_hour is not None:
         rain_mm = req.simulate_rain_mm_per_hour
     elif req.mode == "monsoon":
         try:
             rain_mm, _ = weather.trip(weather.current(), trip_a, trip_b)
+            soon = weather.trip_rain_soon(weather.current(), trip_a, trip_b)
         except weather.WeatherUnavailableError:
             raise ApiError(
                 503, "RAIN_UNAVAILABLE", "Live rainfall is unavailable. Please try again shortly."
@@ -208,6 +209,12 @@ def route(req: RouteRequest):
         "transport": req.transport,
         "rain_mm_per_hour": rain_mm,
         "rain_simulated": req.mode == "monsoon" and req.simulate_rain_mm_per_hour is not None,
+        # Heavier rain due in the next 2 h along the trip (already counted if within the hour).
+        "rain_soon": soon and {
+            "at": soon[0].strftime("%H:%M"),
+            "mm_per_hour": round(soon[1], 1),
+            "counted": soon[0] <= datetime.now(TZ) + timedelta(minutes=weather.SOON_MINUTES),
+        },
         "slot_time": departure.astimezone(TZ).strftime("%H:%M"),
         "temperature_c": temperature,
         "cloud_cover_pct": cloud,
@@ -284,12 +291,17 @@ def add_report(req: ReportRequest):
     return _report_feature(report, time.time())
 
 
+WARMUP_HOLD_S = 0.5
 _mangum = Mangum(app, lifespan="off")
 
 
 def handler(event, context):
     if event.get("warmup"):  # EventBridge keep-warm ping; also preloads the graphs
+        started = time.perf_counter()
         for transport in ("walk", "two_wheeler"):
             graph(transport)
+        # Already warm: stay busy briefly so the rule's other ping (sent at the same moment)
+        # lands on a second instance and keeps that one warm too.
+        time.sleep(max(0.0, WARMUP_HOLD_S - (time.perf_counter() - started)))
         return {"warm": True}
     return _mangum(event, context)

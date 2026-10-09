@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comparison, conditionsText, todayAt, duration } from "./format.js";
+import { comparison, conditionsText, todayAt, duration, noDifference } from "./format.js";
 
 const stats = (safe, direct) => ({
   safe: { duration_min: 20, shaded_pct: null, risk_streets: null, reported_streets: 0, ...safe },
@@ -51,4 +51,13 @@ it("duration switches to hours from 60 min", () => {
   expect(duration(45.4)).toBe("45 min");
   expect(duration(93)).toBe("1 h 33 min");
   expect(duration(120)).toBe("2 h 0 min");
+});
+
+describe("noDifference", () => {
+  const s = (pct, min, risk = 0) => ({ shaded_pct: pct, duration_min: min, risk_streets: risk, reported_streets: 0 });
+  it("is true only when shade and time match", () => {
+    expect(noDifference({ safe: s(31, 13.2), direct: s(31, 12.8) }, "summer")).toBe(true);
+    expect(noDifference({ safe: s(15, 93), direct: s(13, 93) }, "summer")).toBe(false);
+    expect(noDifference({ safe: s(0, 20, 0), direct: s(0, 20, 3) }, "monsoon")).toBe(false);
+  });
 });

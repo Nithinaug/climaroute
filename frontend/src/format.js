@@ -20,6 +20,14 @@ export function comparison(stats, mode) {
   return `${time} · avoids ${avoided} flood-risk street${avoided === 1 ? "" : "s"}`;
 }
 
+// Nothing to compare: the safe route is no better than the direct one and takes the same time.
+export function noDifference({ safe, direct }, mode) {
+  if (Math.round(safe.duration_min) !== Math.round(direct.duration_min)) return false;
+  return mode === "summer"
+    ? safe.shaded_pct === direct.shaded_pct
+    : safe.risk_streets + safe.reported_streets === direct.risk_streets + direct.reported_streets;
+}
+
 export function conditionsText(c, mode) {
   if (!c) return "";
   const parts = [];

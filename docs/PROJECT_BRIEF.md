@@ -13,7 +13,8 @@ A web app that finds the **safest route on foot or by two-wheeler**
   position at the departure time and the live heat. Suggests the best time to
   leave in the next 3 hours. Shows drinking-water points.
 - **Monsoon mode:** avoids low-lying streets likely to waterlog, scaled by
-  live rainfall per part of the city, known flood spots and crowd reports.
+  live rainfall per part of the city, known flood spots and flood reports sent
+  to the API (the web app has no report button).
   A "simulate heavy rain" switch demonstrates it on a dry day.
 - **Five cities:** Bengaluru, Delhi, Mumbai, Chennai, Hyderabad, chosen from a
   dropdown; place search and street names via Amazon Location Service.
@@ -218,7 +219,7 @@ Key decisions:
   surveyed.
 - Shade is recomputed weekly for the current sun path, not daily.
 - Tree shade comes only from mapped and hand-marked trees.
-- Flood risk is a terrain model plus known spots and crowd reports, not a
+- Flood risk is a terrain model plus known spots and API flood reports, not a
   hydrological simulation.
 - Building coverage depends on Overture/OSM footprints (thinner in some areas;
   Bengaluru still uses OSM-only footprints).
@@ -281,8 +282,8 @@ Built:
   e.g. "2 min longer · 33% shaded vs 22%" or "avoids 14 flood-risk streets".
   Durations over an hour show as "1 h 33 min".
 - Summer: "Best time to leave?" (next 3 h) with "Use this time".
-- Report flooding (amber dots that fade over 3 h), Use my location, Clear,
-  below the results.
+- Use my location and Clear below the results. (Flood reporting was removed
+  from the app; the API endpoints remain.)
 - Summer: drinking-water points at street zoom. Monsoon: known flood spots layer.
 - Clear states: loading, no route, API error, rain unavailable.
 - Mobile layout (bottom sheet); keyboard-reachable controls with labels.
@@ -315,8 +316,9 @@ PWA install.
 - **Frontend:** Amplify Hosting connected to GitHub `main`.
 - **Maps:** OpenFreeMap base map; Amazon Location Places (search, reverse
   geocode) through the API Lambda's IAM role.
-- **Warm-up:** EventBridge schedule invokes the API Lambda every 5 minutes
-  (preloading graphs) so judges rarely hit a cold start.
+- **Warm-up:** EventBridge schedule invokes the API Lambda every 5 minutes with two
+  targets at once (each warm instance holds 0.5 s so the pings land on two instances),
+  preloading graphs so judges rarely hit a cold start, even with two requests in flight.
 - **Weekly shade** (Terraform `shade_schedule`, off by default to save cost; set
   `-var shade_schedule=true` to enable): EventBridge runs each city's pipeline on Mondays, staggered
   05:00-07:00 IST (the sun moves <0.5° a day). Run it by hand any time.
@@ -355,7 +357,8 @@ Validation (by eye, before trusting results):
   "Best time to leave" picks a later, shadier departure.
 - Mumbai or Chennai, monsoon: tick "Simulate heavy rain"; the safe route avoids
   flood-risk streets the direct route crosses. Mention live rain is used otherwise.
-- Report flooding on the route and show it re-route at once.
+- Switch to two-wheeler in monsoon: stricter, since scooters stall in water a
+  pedestrian can wade through.
 - City dropdown: all five cities, place search and street names.
 - 20 s of architecture: Fargate prepare, Step Functions fanning out to 150
   Lambdas per city, Terraform workspace per city, serverless cost.
@@ -394,7 +397,7 @@ Validation (by eye, before trusting results):
 - **More cities:** one more workspace + tfvars file each (about an hour of AWS time).
 - **Heat index:** add humidity to the live temperature/cloud heat factor.
 - **Tree canopy** from satellite imagery instead of mapped trees.
-- **Better flood data:** rainfall nowcasts, drainage data, municipal flood
+- **Better flood data:** radar rainfall nowcasts, drainage data, municipal flood
   reports; report moderation (confirmations, abuse limits).
 - **More transport:** cars, public transport, cycling, wheelchair-accessible
   routes.
@@ -577,7 +580,12 @@ def rain_factor(rain_mm_per_hour: float) -> float  # 0.0-1.0, non-decreasing, 0 
 Live rain = Open-Meteo on a ~9 km grid over the city (16 points for Bengaluru; each trip uses
 the worst rain among cells its box touches, and the nearest cell for heat), cached 10 min
 (api/weather.py): the larger of the current rate and each of the past 6 hours'
-rain decayed with a 1.5 h drainage half-life, so risk lingers after a storm.
+rain decayed with a 1.5 h drainage half-life, so risk lingers after a storm,
+and any 15-minute forecast slot in the next hour, so a trip isn't routed into a
+downpour about to start. `conditions.rain_soon` (`at`, `mm_per_hour`, `counted`)
+flags rain of 2.5 mm/h or more due in the next 2 h; `counted` means it's within
+the hour and already in the route. For India the 15-minute values are interpolated
+from hourly models, so storm timing is approximate.
 
 ### 5. Routing function (routing/)
 
@@ -701,7 +709,8 @@ What the frontend needs to draw the covered area and summer extras.
 
 #### `GET /reports`, `POST /reports`
 
-Crowd flood reports (DynamoDB `climaroute-flood-reports`, TTL on `expires_at`).
+Flood reports (DynamoDB `climaroute-flood-reports`, TTL on `expires_at`). Not
+called by the web app since its report button was removed; kept for later use.
 `POST {"lat": .., "lon": ..}` snaps to the nearest street (≤ 60 m) and returns
 `201` with a GeoJSON Point Feature. `GET` returns active reports as a
 FeatureCollection with `properties.age_min` and `properties.strength`. A report
