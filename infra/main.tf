@@ -121,7 +121,7 @@ resource "aws_iam_role_policy" "lambda_data" {
       { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject"], Resource = "${aws_s3_bucket.data.arn}/*" },
       # ListBucket makes a missing key return NoSuchKey instead of AccessDenied.
       { Effect = "Allow", Action = "s3:ListBucket", Resource = aws_s3_bucket.data.arn },
-      { Effect = "Allow", Action = ["dynamodb:PutItem", "dynamodb:Query"], Resource = aws_dynamodb_table.reports.arn },
+      { Effect = "Allow", Action = ["dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"], Resource = aws_dynamodb_table.reports.arn },
       { Effect = "Allow", Action = ["geo-places:SearchText", "geo-places:ReverseGeocode"], Resource = "arn:aws:geo-places:${var.region}::provider/default" },
     ]
   })
@@ -178,6 +178,14 @@ resource "aws_apigatewayv2_route" "default" {
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
+# The two routes that call Amazon Location (paid per call) get their own, lower throttle.
+resource "aws_apigatewayv2_route" "places" {
+  for_each  = toset(["GET /place", "GET /search"])
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = each.value
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.http.id
   name        = "$default"
@@ -185,6 +193,36 @@ resource "aws_apigatewayv2_stage" "default" {
   default_route_settings {
     throttling_rate_limit  = 20
     throttling_burst_limit = 40
+  }
+  dynamic "route_settings" {
+    for_each = aws_apigatewayv2_route.places
+    content {
+      route_key              = route_settings.value.route_key
+      throttling_rate_limit  = 5
+      throttling_burst_limit = 10
+    }
+  }
+}
+
+# Monthly spend alerts by email (the whole account, so only in the default workspace). Set
+# budget_email in a git-ignored tfvars file or with -var; with no email, no budget is made.
+resource "aws_budgets_budget" "monthly" {
+  count        = local.primary && var.budget_email != "" ? 1 : 0
+  name         = "climaroute-monthly"
+  budget_type  = "COST"
+  limit_amount = "30"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  dynamic "notification" {
+    for_each = [5, 15, 30]
+    content {
+      comparison_operator        = "GREATER_THAN"
+      threshold                  = notification.value
+      threshold_type             = "ABSOLUTE_VALUE"
+      notification_type          = "ACTUAL"
+      subscriber_email_addresses = [var.budget_email]
+    }
   }
 }
 

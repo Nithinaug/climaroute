@@ -54,3 +54,9 @@ variable "shade_schedule" {
   type        = bool
   default     = false
 }
+
+variable "budget_email" {
+  description = "Email for monthly AWS spend alerts ($5, $15, $30). Empty = no budget."
+  type        = string
+  default     = ""
+}

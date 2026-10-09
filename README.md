@@ -108,6 +108,11 @@ Each city is its own copy of the backend in a Terraform workspace (`default` is 
 `VITE_API_URLS` environment variable in the Amplify console (and in `frontend/.env.local`
 for local builds).
 
+Cost controls: API Gateway throttles each city to 20 requests/s, and to 5/s on `/place` and
+`/search` (Amazon Location, $0.50 per 1,000 calls). Those calls are also capped at 2,000 per city
+per day (`LOCATION_DAILY_LIMIT`); past it, search and street names pause until midnight. Pass
+`-var budget_email=...` to get monthly spend alerts at $5, $15 and $30.
+
 ## Attribution and licences
 
 Data:
