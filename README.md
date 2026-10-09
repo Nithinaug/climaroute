@@ -7,8 +7,7 @@ the one that leaves you in full sun for 40 minutes or wading through a flooded u
 ClimaRoute finds the route that keeps you in the shade, or out of the water, and shows what the
 detour costs next to the direct route.
 
-**Live:** https://main.d1lxnvpn0ohz9a.amplifyapp.com (Bengaluru, Delhi, Mumbai, Chennai and
-Hyderabad)
+Covers five cities: Bengaluru, Delhi, Mumbai, Chennai and Hyderabad.
 
 ## What it does
 
@@ -93,15 +92,18 @@ length) and routed with scipy's Dijkstra. A route takes about half a second.
 
 Each city has its own API (see [Deploying](#deploying)).
 
-| Endpoint | What it returns |
-|---|---|
-| `GET /area` | City name, bounding box, centre, drinking-water points |
-| `POST /route` | Safe and direct routes as GeoJSON, their stats, and the conditions used |
-| `POST /best-time` | The route for now and every 30 min over the next 3 h, and the best one |
-| `GET /now?at=` | Temperature (and feels-like) at the city centre now, or forecast for `at` |
-| `GET /search?q=` | Place search within the city |
-| `GET /place?lat=&lon=` | Street name for a point, and whether a route can start or end there |
-| `GET /reports`, `POST /reports` | Flood reports (accepted by the API; not used by the web app) |
+| Endpoint | What it returns | Data it uses |
+|---|---|---|
+| `GET /area` | City name, bounding box, centre, drinking-water points | S3 (city data) |
+| `POST /route` | Safe and direct routes as GeoJSON, their stats, and the conditions used | S3 (street graph with shade and flood risk), Open-Meteo (weather), DynamoDB (flood reports) |
+| `POST /best-time` | The route for now and every 30 min over the next 3 h, and the best one | Same as `/route`, run 7 times |
+| `GET /now?at=` | Temperature (and feels-like) at the city centre now, or forecast for `at` | Open-Meteo |
+| `GET /search?q=` | Place search within the city | Amazon Location (SearchText) |
+| `GET /place?lat=&lon=` | Street name for a point, and whether a route can start or end there | Amazon Location (ReverseGeocode), S3 (street graph) |
+| `GET /reports`, `POST /reports` | Flood reports (accepted by the API; not used by the web app) | DynamoDB |
+
+Open-Meteo is fetched once for the whole city and cached for 10 minutes, so most requests don't
+call it. Amazon Location calls are throttled and capped per day (see [Cost](#cost)).
 
 `/route` body: `{"origin": {"lat", "lon"}, "destination": {"lat", "lon"}, "mode": "summer" |
 "monsoon", "transport": "walk" | "two_wheeler", "departure_time"?, "simulate_rain_mm_per_hour"?}`.
