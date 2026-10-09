@@ -382,16 +382,17 @@ export default function App() {
     if (!area) return;
     let cancelled = false;
     const load = () =>
-      document.visibilityState === "visible" &&
       getNow(time && todayAt(time)).then((w) => !cancelled && setNowWeather(w)).catch(() => {});
+    // Later refreshes only while the tab is in view; the first load always happens.
+    const refreshIfVisible = () => document.visibilityState === "visible" && load();
     setNowWeather(null);
     load();
-    const id = setInterval(load, REFRESH_MS);
-    document.addEventListener("visibilitychange", load); // back on the tab: fresh reading
+    const id = setInterval(refreshIfVisible, REFRESH_MS);
+    document.addEventListener("visibilitychange", refreshIfVisible); // back on the tab: fresh reading
     return () => {
       cancelled = true;
       clearInterval(id);
-      document.removeEventListener("visibilitychange", load);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
     };
   }, [area, time]);
 
