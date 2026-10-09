@@ -317,7 +317,8 @@ PWA install.
   geocode) through the API Lambda's IAM role.
 - **Warm-up:** EventBridge schedule invokes the API Lambda every 5 minutes
   (preloading graphs) so judges rarely hit a cold start.
-- **Weekly shade:** EventBridge runs each city's pipeline on Mondays, staggered
+- **Weekly shade** (Terraform `shade_schedule`, off by default to save cost; set
+  `-var shade_schedule=true` to enable): EventBridge runs each city's pipeline on Mondays, staggered
   05:00-07:00 IST (the sun moves <0.5° a day). Run it by hand any time.
   `SetSun` rewrites `tiles/index.json` for today's sun (built-in solar position,
   no pvlib), then tiles are shaded in parallel and merged (~45 s for Koramangala; Bengaluru's 5,025 tiles

@@ -48,3 +48,9 @@ variable "prepare_memory" {
   type        = number
   default     = 30720
 }
+
+variable "shade_schedule" {
+  description = "Run the shade pipeline weekly. Off: the last computed shade stays live (manual runs still work)."
+  type        = bool
+  default     = false
+}

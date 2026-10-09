@@ -285,6 +285,7 @@ resource "aws_iam_role_policy" "scheduler" {
 resource "aws_cloudwatch_event_rule" "daily_shade" {
   name                = "${local.name}-daily-shade"
   schedule_expression = "cron(${lookup(local.shade_utc, terraform.workspace, "0 2 ? * MON")} *)"
+  state               = var.shade_schedule ? "ENABLED" : "DISABLED"
 }
 
 resource "aws_cloudwatch_event_target" "daily_shade" {

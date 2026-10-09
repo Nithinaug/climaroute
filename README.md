@@ -105,6 +105,28 @@ Each city is its own copy of the backend in a Terraform workspace (`default` is 
 `VITE_API_URLS` environment variable in the Amplify console (and in `frontend/.env.local`
 for local builds).
 
+## Attribution and licences
+
+Data:
+
+| Source | Licence |
+|---|---|
+| OpenStreetMap contributors (streets, trees, water points; via Geofabrik) | ODbL 1.0 |
+| Overture Maps Foundation, buildings theme (includes OSM, Microsoft and Google footprints) | ODbL 1.0 |
+| Google Open Buildings 2.5D Temporal (building heights) | CC BY 4.0 |
+| Copernicus GLO-30 DEM, © DLR/Airbus, provided by ESA (via AWS Open Data) | Copernicus DEM licence |
+| Open-Meteo weather API | CC BY 4.0 |
+| Map tiles: OpenFreeMap, OpenMapTiles schema | OpenFreeMap terms; OpenMapTiles CC BY 4.0 |
+| Place search and names: Amazon Location Service (HERE / Esri data) | AWS service terms |
+
+Main libraries: MapLibre GL JS (BSD-3), React (MIT), Vite (MIT), FastAPI (MIT), Mangum (MIT),
+NumPy and SciPy (BSD-3), Shapely (BSD-3), OSMnx (MIT), NetworkX (BSD-3), GeoPandas (BSD-3),
+rasterio (BSD-3), pysheds (GPL-3.0, used only in the offline prepare step), pyosmium and
+osmium-tool (BSD-2 / GPL-3.0, prepare step only), DuckDB (MIT), pytest (MIT), Vitest (MIT),
+Terraform (BUSL-1.1, used as a tool).
+
+Built with help from AI coding tools: Claude Code (Anthropic).
+
 ## Limitations
 
 - Building heights are satellite estimates (Google Open Buildings) or defaults by building type,
@@ -114,7 +136,8 @@ for local builds).
   not a hydrological simulation. Flooding with no local rain (lake overflow, blocked drains) is
   only caught if someone reports it.
 - Weather is read at one point per city, so very local storms can be missed.
-- Shade is recomputed weekly for the current sun path; within a week the difference is small.
+- Shade is computed for a given date and refreshed by re-running the pipeline (weekly schedule
+  via `shade_schedule = true`); within a week the difference is small.
 - Travel times use constant speeds; no live traffic or road closures.
 - Flood reports are anonymous and unverified, so a false report can block a street for up to 3 h.
 
