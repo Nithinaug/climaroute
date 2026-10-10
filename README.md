@@ -7,7 +7,16 @@ the one that leaves you in full sun for 40 minutes or wading through a flooded u
 ClimaRoute finds the route that keeps you in the shade, or out of the water, and shows what the
 detour costs next to the direct route.
 
-Covers five cities: Bengaluru, Delhi, Mumbai, Chennai and Hyderabad.
+Covers five cities: Bengaluru, Delhi, Mumbai, Chennai and Hyderabad. Summer and Monsoon are
+modes, not seasons: either can be used any time of year.
+
+## Demo video
+
+A 3-minute walkthrough: a summer route in Mumbai (heat warning, best time to leave), a monsoon
+route in Delhi (simulated downpour at night, walking and two-wheeler), and the AWS pipeline behind
+it. The app part was recorded automatically: a Playwright script drove the live site in Chrome
+while OBS captured the screen, and the narration is Amazon Polly (generative voice "Amy"), timed
+line by line to the actions on screen.
 
 ## What it does
 
@@ -15,9 +24,10 @@ Covers five cities: Bengaluru, Delhi, Mumbai, Chennai and Hyderabad.
 - Routes through the most shade from buildings and trees at the time you leave, weighted by how
   hot it is (temperature and cloud cover). Shade is worked out for every 15 minutes of the day, so
   leaving at 16:00 gives a different route than leaving at 12:00.
-- Warns when it will feel dangerously hot or the sun is fierce ("Feels like 41°C · UV 10 (very
-  high) at 12:00"), using the feels-like temperature (heat plus humidity) and the UV index, and a
-  warm haze builds at the edges of the map.
+- Warns when it will feel dangerously hot or the sun is fierce: once the feels-like temperature
+  (heat plus humidity) reaches 37°C or the UV index reaches 8, the result shows both, e.g.
+  "Feels like 40°C · UV 7 (high) at 13:00". The warning turns red from 42°C or UV 11, and a warm
+  haze builds at the edges of the map.
 - **Best time to leave:** compares leaving now with every half hour over the next 3 hours and
   suggests the departure with the least sun exposure.
 
