@@ -221,7 +221,8 @@ const heatWarned = (c) => c?.feels_like_c >= HEAT_CAUTION_C || c?.uv_index >= UV
 function HeatWarning({ feels, uv, at }) {
   const danger = feels >= HEAT_DANGER_C || uv >= 11;
   const hot = feels >= HEAT_CAUTION_C;
-  const strongSun = uv >= UV_WARN;
+  // Once there's a warning, always give the UV too (not only when it's what triggered it).
+  const strongSun = uv != null;
   return (
     <p className={`flex items-start gap-2 rounded-xl px-3 py-2 ${danger ? "bg-risk/10 text-red-800" : "bg-sun-soft text-sun-deep"}`}>
       <Icon name={hot ? "thermostat" : "light_mode"} className="mt-0.5" />
