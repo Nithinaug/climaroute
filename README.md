@@ -12,11 +12,9 @@ modes, not seasons: either can be used any time of year.
 
 ## Demo video
 
-A 3-minute walkthrough: a summer route in Mumbai (heat warning, best time to leave), a monsoon
-route in Delhi (simulated downpour at night, walking and two-wheeler), and the AWS pipeline behind
-it. The app part was recorded automatically: a Playwright script drove the live site in Chrome
-while OBS captured the screen, and the narration is Amazon Polly (generative voice "Amy"), timed
-line by line to the actions on screen.
+A 3-minute walkthrough of the live app: a summer route in Mumbai (heat warning, best time to
+leave), a monsoon route in Delhi (simulated downpour at night, walking and two-wheeler), and the AWS
+pipeline and architecture behind it. Narration by Amazon Polly (generative voice "Amy").
 
 ## What it does
 
