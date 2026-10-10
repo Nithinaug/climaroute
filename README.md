@@ -12,6 +12,10 @@ modes, not seasons: either can be used any time of year.
 
 ## Demo video
 
+Watch it on YouTube: https://youtu.be/lNYggc0OGhc
+
+How we built it (blog): https://builder.aws.com/content/3KVueQVSaXyrV6k1ZzeONxfwenZ/routing-around-the-weather-how-we-built-climaroute-on-aws
+
 A 3-minute walkthrough of the live app: a summer route in Mumbai (heat warning, best time to
 leave), a monsoon route in Delhi (simulated downpour at night, walking and two-wheeler), and the AWS
 pipeline and architecture behind it. Narration by Amazon Polly (generative voice "Amy").
