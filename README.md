@@ -10,6 +10,11 @@ detour costs next to the direct route.
 Covers five cities: Bengaluru, Delhi, Mumbai, Chennai and Hyderabad. Summer and Monsoon are
 modes, not seasons: either can be used any time of year.
 
+Live app: https://main.d1lxnvpn0ohz9a.amplifyapp.com
+
+Try an example trip (Mumbai, 1 pm, Summer mode):
+https://main.d1lxnvpn0ohz9a.amplifyapp.com/#mumbai?from=19.03354,72.83923&to=19.02209,72.84267&mode=summer&by=walk&at=13:00
+
 ## Demo video
 
 Watch it on YouTube: https://youtu.be/lNYggc0OGhc
